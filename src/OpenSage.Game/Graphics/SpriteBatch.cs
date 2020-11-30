@@ -1,6 +1,8 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Collections.Generic;
+using System.Numerics;
 using OpenSage.Content;
-using OpenSage.Graphics.Effects;
+using OpenSage.Graphics.Shaders;
 using OpenSage.Mathematics;
 using OpenSage.Utilities.Extensions;
 using Veldrid;
@@ -10,66 +12,95 @@ namespace OpenSage.Graphics
 {
     public sealed class SpriteBatch : DisposableBase
     {
+        private readonly SpriteShaderResources _spriteShaderResources;
+        private readonly Texture _solidWhiteTexture;
         private readonly GraphicsDevice _graphicsDevice;
-        private readonly SpriteMaterial _material;
-        private readonly ConstantBuffer<SpriteMaterial.MaterialConstantsVS> _materialConstantsVSBuffer;
+        private readonly Pipeline _pipeline;
+        private readonly ConstantBuffer<SpriteShaderResources.MaterialConstantsVS> _materialConstantsVSBuffer;
+        private readonly ConstantBuffer<SpriteShaderResources.SpriteConstantsPS> _spriteConstantsPSBuffer;
+        private readonly ResourceSet _spriteConstantsResourceSet;
+        private readonly Dictionary<Texture, ResourceSet> _textureResourceSets;
         private readonly DeviceBuffer _vertexBuffer;
-        private readonly SpriteVertex[] _vertices;
+        private readonly SpriteShaderResources.SpriteVertex[] _vertices;
         private readonly DeviceBuffer _indexBuffer;
 
         private const int InitialBatchSize = 256;
         private SpriteBatchItem[] _batchItems;
         private int _currentBatchIndex;
 
-        private CommandList _commandEncoder;
+        private CommandList _commandList;
 
-        public SpriteBatch(ContentManager contentManager, in BlendStateDescription blendStateDescription, in OutputDescription outputDescription)
+        internal SpriteBatch(
+            GraphicsLoadContext loadContext,
+            in BlendStateDescription blendStateDescription,
+            in OutputDescription outputDescription)
         {
-            _graphicsDevice = contentManager.GraphicsDevice;
+            _spriteShaderResources = loadContext.ShaderResources.Sprite;
+            _solidWhiteTexture = loadContext.StandardGraphicsResources.SolidWhiteTexture;
+            _graphicsDevice = loadContext.GraphicsDevice;
 
-            _material = AddDisposable(new SpriteMaterial(
-                contentManager,
-                contentManager.EffectLibrary.Sprite,
+            _pipeline = loadContext.ShaderResources.Sprite.GetCachedPipeline(
                 blendStateDescription,
-                outputDescription));
+                outputDescription);
 
-            _materialConstantsVSBuffer = AddDisposable(new ConstantBuffer<SpriteMaterial.MaterialConstantsVS>(contentManager.GraphicsDevice));
+            _materialConstantsVSBuffer = AddDisposable(new ConstantBuffer<SpriteShaderResources.MaterialConstantsVS>(loadContext.GraphicsDevice));
 
-            _material.SetMaterialConstantsVS(_materialConstantsVSBuffer.Buffer);
+            _spriteConstantsPSBuffer = AddDisposable(new ConstantBuffer<SpriteShaderResources.SpriteConstantsPS>(loadContext.GraphicsDevice));
+
+            _spriteConstantsPSBuffer.Value.IgnoreAlpha = false;
+            _spriteConstantsPSBuffer.Update(_graphicsDevice);
+
+            _spriteConstantsResourceSet = AddDisposable(loadContext.ShaderResources.Sprite.CreateSpriteConstantsResourceSet(
+                _materialConstantsVSBuffer.Buffer,
+                _spriteConstantsPSBuffer.Buffer));
 
             _vertexBuffer = AddDisposable(_graphicsDevice.ResourceFactory.CreateBuffer(
-                new BufferDescription(SpriteVertex.VertexDescriptor.Stride * 4, BufferUsage.VertexBuffer | BufferUsage.Dynamic)));
+                new BufferDescription(SpriteShaderResources.SpriteVertex.VertexDescriptor.Stride * 4, BufferUsage.VertexBuffer | BufferUsage.Dynamic)));
 
-            _vertices = new SpriteVertex[4]; // Order is TL, TR, BL, BR
+            _vertices = new SpriteShaderResources.SpriteVertex[4]; // Order is TL, TR, BL, BR
 
             _indexBuffer = AddDisposable(_graphicsDevice.CreateStaticBuffer(
                 new ushort[] { 0, 1, 2, 2, 1, 3 },
                 BufferUsage.IndexBuffer));
 
             _batchItems = new SpriteBatchItem[InitialBatchSize];
+
+            _textureResourceSets = new Dictionary<Texture, ResourceSet>();
         }
 
         public void Begin(
-            CommandList commandEncoder,
-            Sampler samplerState,
-            in SizeF outputSize)
+            CommandList commandList,
+            Sampler sampler,
+            in SizeF outputSize,
+            bool ignoreAlpha = false)
         {
-            _commandEncoder = commandEncoder;
+            _commandList = commandList;
 
-            _material.Effect.Begin(_commandEncoder);
+            _commandList.SetPipeline(_pipeline);
 
-            _material.SetSampler(samplerState);
-
-            _materialConstantsVSBuffer.Value.Projection = Matrix4x4.CreateOrthographicOffCenter(
+            var projection = Matrix4x4.CreateOrthographicOffCenter(
                0,
                outputSize.Width,
                outputSize.Height,
                0,
                0,
                -1);
-            _materialConstantsVSBuffer.Update(commandEncoder);
+            if (projection != _materialConstantsVSBuffer.Value.Projection)
+            {
+                _materialConstantsVSBuffer.Value.Projection = projection;
+                _materialConstantsVSBuffer.Update(commandList);
+            }
 
-            _material.SetMaterialConstantsVS(_materialConstantsVSBuffer.Buffer);
+            if (ignoreAlpha != _spriteConstantsPSBuffer.Value.IgnoreAlpha)
+            {
+                _spriteConstantsPSBuffer.Value.IgnoreAlpha = ignoreAlpha;
+                _spriteConstantsPSBuffer.Update(commandList);
+            }
+
+            _commandList.SetGraphicsResourceSet(0, _spriteConstantsResourceSet);
+
+            var samplerResourceSet = _spriteShaderResources.GetCachedSamplerResourceSet(sampler);
+            _commandList.SetGraphicsResourceSet(1, samplerResourceSet);
 
             _currentBatchIndex = 0;
         }
@@ -84,25 +115,48 @@ namespace OpenSage.Graphics
             return ref _batchItems[_currentBatchIndex++];
         }
 
+        private static Vector2 GetTopLeftUV(in Rectangle src, Texture img, bool flipped)
+        {
+            return new Vector2(src.Left / (float) img.Width, flipped ?
+                (src.Bottom / (float) img.Height) :
+                (src.Top / (float) img.Height));
+        }
+
+        private static Vector2 GetBottomRightUV(in Rectangle src, Texture img, bool flipped)
+        {
+            return new Vector2(src.Right / (float) img.Width, flipped ?
+                (src.Top / (float) img.Height) :
+                (src.Bottom / (float) img.Height));
+        }
+
+        private static Triangle2D GetTriangleUV(in Triangle2D src, Texture img, bool flipped)
+        {
+            return new Triangle2D(
+                new Vector2(src.V0.X / img.Width, flipped ? 1 - (src.V0.Y / img.Height) : src.V0.Y / img.Height),
+                new Vector2(src.V1.X / img.Width, flipped ? 1 - (src.V1.Y / img.Height) : src.V1.Y / img.Height),
+                new Vector2(src.V2.X / img.Width, flipped ? 1 - (src.V2.Y / img.Height) : src.V2.Y / img.Height));
+        }
+
         public void DrawImage(
             Texture image,
             in Rectangle? sourceRect,
             in RectangleF destinationRect,
-            in ColorRgbaF color)
+            in ColorRgbaF color,
+            in bool flipped = false,
+            SpriteFillMethod fillMethod = SpriteFillMethod.Normal,
+            float fillAmount = 0.0f,
+            bool grayscale = false,
+            Texture alphaMask = null)
         {
             ref var batchItem = ref CreateBatchItem();
 
             batchItem.Texture = image;
+            batchItem.AlphaMask = alphaMask;
 
             var sourceRectangle = sourceRect ?? new Rectangle(0, 0, (int) image.Width, (int) image.Height);
 
-            var texCoordTL = new Vector2(
-                sourceRectangle.Left / (float) image.Width,
-                sourceRectangle.Top / (float) image.Height);
-
-            var texCoordBR = new Vector2(
-                sourceRectangle.Right / (float) image.Width,
-                sourceRectangle.Bottom / (float) image.Height);
+            var texCoordTL = GetTopLeftUV(sourceRectangle, image, flipped);
+            var texCoordBR = GetBottomRightUV(sourceRectangle, image, flipped);
 
             batchItem.Set(
                 destinationRect.X,
@@ -112,7 +166,10 @@ namespace OpenSage.Graphics
                 color,
                 texCoordTL,
                 texCoordBR,
-                0);
+                0,
+                fillMethod,
+                fillAmount,
+                grayscale);
         }
 
         public void DrawImage(
@@ -122,21 +179,19 @@ namespace OpenSage.Graphics
             float rotation,
             Vector2 origin,
             in Vector2 scale,
-            in ColorRgbaF color)
+            in ColorRgbaF color,
+            in bool flipped = false,
+            Texture alphaMask = null)
         {
             ref var batchItem = ref CreateBatchItem();
 
             batchItem.Texture = image;
+            batchItem.AlphaMask = alphaMask;
 
             var sourceRectangle = sourceRect ?? new Rectangle(0, 0, (int) image.Width, (int) image.Height);
 
-            var texCoordTL = new Vector2(
-                sourceRectangle.Left / (float) image.Width,
-                sourceRectangle.Top / (float) image.Height);
-
-            var texCoordBR = new Vector2(
-                sourceRectangle.Right / (float) image.Width,
-                sourceRectangle.Bottom / (float) image.Height);
+            var texCoordTL = GetTopLeftUV(sourceRectangle, image, flipped);
+            var texCoordBR = GetBottomRightUV(sourceRectangle, image, flipped);
 
             var width = sourceRectangle.Width * scale.X;
             var height = sourceRectangle.Height * scale.Y;
@@ -150,8 +205,8 @@ namespace OpenSage.Graphics
                 -origin.Y,
                 width,
                 height,
-                MathUtility.Sin(rotation),
-                MathUtility.Cos(rotation),
+                MathF.Sin(rotation),
+                MathF.Cos(rotation),
                 color,
                 texCoordTL,
                 texCoordBR,
@@ -162,18 +217,16 @@ namespace OpenSage.Graphics
             Texture texture,
             in Triangle2D sourceTriangle,
             in Triangle2D destinationTriangle,
-            in ColorRgbaF tintColor)
+            in ColorRgbaF tintColor,
+            in bool flipped = false,
+            Texture alphaMask = null)
         {
             ref var batchItem = ref CreateBatchItem();
 
             batchItem.Texture = texture;
+            batchItem.AlphaMask = alphaMask;
 
-            var textureCoordinates = new Triangle2D
-            {
-                V0 = new Vector2(sourceTriangle.V0.X / texture.Width, sourceTriangle.V0.Y / texture.Height),
-                V1 = new Vector2(sourceTriangle.V1.X / texture.Width, sourceTriangle.V1.Y / texture.Height),
-                V2 = new Vector2(sourceTriangle.V2.X / texture.Width, sourceTriangle.V2.Y / texture.Height)
-            };
+            var textureCoordinates = GetTriangleUV(sourceTriangle, texture, flipped);
 
             batchItem.Set(
                 destinationTriangle,
@@ -185,48 +238,90 @@ namespace OpenSage.Graphics
         public void End()
         {
             // TODO: Batch draw calls by texture.
+            // TODO: Sort by FillMethod
 
             for (var i = 0; i < _currentBatchIndex; i++)
             {
                 ref var batchItem = ref _batchItems[i];
+
+                if (batchItem.OutputOffset != _spriteConstantsPSBuffer.Value.OutputOffset
+                    || batchItem.OutputSize != _spriteConstantsPSBuffer.Value.OutputSize
+                    || batchItem.FillMethod != _spriteConstantsPSBuffer.Value.FillMethod
+                    || batchItem.FillAmount != _spriteConstantsPSBuffer.Value.FillAmount
+                    || batchItem.Grayscale != _spriteConstantsPSBuffer.Value.Grayscale)
+                {
+                    _spriteConstantsPSBuffer.Value.OutputOffset = batchItem.OutputOffset;
+                    _spriteConstantsPSBuffer.Value.OutputSize = batchItem.OutputSize;
+                    _spriteConstantsPSBuffer.Value.FillMethod = batchItem.FillMethod;
+                    _spriteConstantsPSBuffer.Value.FillAmount = batchItem.FillAmount;
+                    _spriteConstantsPSBuffer.Value.Grayscale = batchItem.Grayscale;
+                    _spriteConstantsPSBuffer.Update(_commandList);
+                }
 
                 _vertices[0] = batchItem.VertexTL;
                 _vertices[1] = batchItem.VertexTR;
                 _vertices[2] = batchItem.VertexBL;
                 _vertices[3] = batchItem.VertexBR;
 
-                _commandEncoder.UpdateBuffer(_vertexBuffer, 0, _vertices);
+                _commandList.UpdateBuffer(_vertexBuffer, 0, _vertices);
 
-                _commandEncoder.SetVertexBuffer(0, _vertexBuffer);
+                _commandList.SetVertexBuffer(0, _vertexBuffer);
 
-                _material.SetTexture(batchItem.Texture);
+                var textureResourceSet = GetTextureResourceSet(batchItem.Texture);
+                _commandList.SetGraphicsResourceSet(2, textureResourceSet);
 
-                _material.ApplyPipelineState();
-                _material.ApplyProperties();
+                var alphaMaskResourceSet = GetAlphaMaskResourceSet(batchItem.AlphaMask ?? _solidWhiteTexture);
+                _commandList.SetGraphicsResourceSet(3, alphaMaskResourceSet);
 
-                _material.Effect.ApplyPipelineState(_commandEncoder);
-                _material.Effect.ApplyParameters(_commandEncoder);
+                _commandList.SetIndexBuffer(_indexBuffer, IndexFormat.UInt16);
 
                 var indexCount = batchItem.ItemType == SpriteBatchItemType.Quad ? 6u : 3u;
-
-                _commandEncoder.SetIndexBuffer(_indexBuffer, IndexFormat.UInt16);
-
-                _commandEncoder.DrawIndexed(indexCount);
+                _commandList.DrawIndexed(indexCount);
             }
+        }
+
+        private ResourceSet GetTextureResourceSet(Texture texture)
+        {
+            // TODO: Clear not-recently-used textures from the cache.
+            if (!_textureResourceSets.TryGetValue(texture, out var result))
+            {
+                result = AddDisposable(_spriteShaderResources.CreateTextureResourceSet(texture));
+                _textureResourceSets.Add(texture, result);
+            }
+            return result;
+        }
+
+        private ResourceSet GetAlphaMaskResourceSet(Texture alphaMask)
+        {
+            // TODO: Clear not-recently-used textures from the cache.
+            if (!_textureResourceSets.TryGetValue(alphaMask, out var result))
+            {
+                result = AddDisposable(_spriteShaderResources.CreateAlphaMaskResourceSet(alphaMask));
+                _textureResourceSets.Add(alphaMask, result);
+            }
+            return result;
         }
 
         private struct SpriteBatchItem
         {
             public Texture Texture;
+            public Texture AlphaMask;
 
             public SpriteBatchItemType ItemType;
 
-            public SpriteVertex VertexTL;
-            public SpriteVertex VertexTR;
-            public SpriteVertex VertexBL;
+            public SpriteShaderResources.SpriteVertex VertexTL;
+            public SpriteShaderResources.SpriteVertex VertexTR;
+            public SpriteShaderResources.SpriteVertex VertexBL;
 
             // Not used for a triangle item.
-            public SpriteVertex VertexBR;
+            public SpriteShaderResources.SpriteVertex VertexBR;
+
+            public Vector2 OutputOffset;
+            public Vector2 OutputSize;
+            public SpriteFillMethod FillMethod;
+            public float FillAmount;
+
+            public bool Grayscale;
 
             public void Set(float x, float y, float dx, float dy, float w, float h, float sin, float cos, in ColorRgbaF color, in Vector2 texCoordTL, in Vector2 texCoordBR, float depth)
             {
@@ -261,7 +356,15 @@ namespace OpenSage.Graphics
                 VertexBR.UV.Y = texCoordBR.Y;
             }
 
-            public void Set(float x, float y, float w, float h, in ColorRgbaF color, in Vector2 texCoordTL, in Vector2 texCoordBR, float depth)
+            public void Set(
+                float x, float y, float w, float h,
+                in ColorRgbaF color,
+                in Vector2 texCoordTL,
+                in Vector2 texCoordBR,
+                float depth,
+                SpriteFillMethod fillMethod,
+                float fillAmount,
+                bool grayscale)
             {
                 ItemType = SpriteBatchItemType.Quad;
 
@@ -292,6 +395,13 @@ namespace OpenSage.Graphics
                 VertexBR.Color = color;
                 VertexBR.UV.X = texCoordBR.X;
                 VertexBR.UV.Y = texCoordBR.Y;
+
+                OutputOffset = new Vector2(x, y);
+                OutputSize = new Vector2(w, h);
+                FillMethod = fillMethod;
+                FillAmount = fillAmount;
+
+                Grayscale = grayscale;
             }
 
             public void Set(in Triangle2D triangle, in Triangle2D texCoords, in ColorRgbaF color, float depth)
@@ -326,5 +436,11 @@ namespace OpenSage.Graphics
             Quad,
             Triangle
         }
+    }
+
+    public enum SpriteFillMethod
+    {
+        Normal,
+        Radial360
     }
 }

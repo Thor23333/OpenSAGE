@@ -1,15 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using OpenSage.Logic.Object;
 
 namespace OpenSage.Graphics.Cameras
 {
     public interface ICameraController
     {
-        float Pitch { get; set; }
         float Zoom { get; set; }
 
         Vector3 TerrainPosition { get; set; }
+
+        void SetPitch(float pitch);
 
         void SetLookDirection(Vector3 lookDirection);
 
@@ -25,6 +27,9 @@ namespace OpenSage.Graphics.Cameras
 
         void EndAnimation();
 
-        void UpdateCamera(CameraComponent camera, in CameraInputState inputState, GameTime gameTime);
+        void UpdateCamera(Camera camera, in CameraInputState inputState, in TimeInterval gameTime);
+
+        void GoToObject(GameObject gameObject);
+
     }
 }

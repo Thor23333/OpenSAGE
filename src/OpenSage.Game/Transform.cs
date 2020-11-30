@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Numerics;
 using OpenSage.Mathematics;
 
 namespace OpenSage
@@ -9,6 +10,8 @@ namespace OpenSage
         {
             return new Transform(Vector3.Zero, Quaternion.Identity);
         }
+
+        private readonly Vector4 _lookDirBase = new Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
         private Vector3 _translation;
         private Quaternion _rotation;
@@ -37,6 +40,7 @@ namespace OpenSage
             {
                 _rotation = value;
                 SetMatricesDirty();
+                LookDirection = Vector4.Transform(_lookDirBase, _rotation).ToVector3();
             }
         }
 
@@ -50,6 +54,8 @@ namespace OpenSage
             }
         }
 
+        internal bool IsDirty => _isMatrixDirty || _isMatrixInverseDirty;
+
         private void SetMatricesDirty()
         {
             _isMatrixDirty = true;
@@ -62,6 +68,13 @@ namespace OpenSage
             Rotation = rotation;
             Scale = scale;
         }
+
+        public Transform(in Matrix4x4 matrix)
+        {
+            Matrix = matrix;
+        }
+
+        public Vector3 LookDirection { get; private set; }
 
         public Matrix4x4 Matrix
         {
@@ -77,6 +90,29 @@ namespace OpenSage
                 }
                 return _matrix;
             }
+
+            internal set
+            {
+                _matrix = value;
+
+                if (!Matrix4x4.Decompose(
+                    value,
+                    out var scale,
+                    out var rotation,
+                    out var translation))
+                {
+                    throw new InvalidOperationException();
+                }
+
+                // We assume uniform scale.
+
+                Scale = scale.Z;
+                Rotation = rotation;
+                Translation = translation;
+
+                _isMatrixDirty = false;
+                _isMatrixInverseDirty = true;
+            }
         }
 
         public Matrix4x4 MatrixInverse
@@ -89,6 +125,18 @@ namespace OpenSage
                     _isMatrixInverseDirty = false;
                 }
                 return _matrixInverse;
+            }
+        }
+
+        public float Yaw => -MathF.Atan2(Matrix.M21, Matrix.M11);
+
+        public Vector3 EulerAngles
+        {
+            get
+            {
+                var x = MathF.Atan2(Matrix.M32, Matrix.M33);
+                var y = MathF.Atan2(-Matrix.M31, MathF.Sqrt(MathF.Pow(Matrix.M32, 2) + MathF.Pow(Matrix.M33, 2)));
+                return new Vector3(x, y, Yaw);
             }
         }
     }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using OpenSage.Input;
 using OpenSage.Mathematics;
+using OpenSage.Utilities;
 using Veldrid;
 using Veldrid.Sdl2;
 using Veldrid.StartupUtilities;
@@ -14,8 +15,6 @@ namespace OpenSage
         public event EventHandler ClientSizeChanged;
 
         private readonly Sdl2Window _window;
-
-        private readonly Queue<InputMessage> _messageQueue = new Queue<InputMessage>();
 
         private bool _closing;
         private int _lastMouseX;
@@ -37,22 +36,71 @@ namespace OpenSage
             }
         }
 
-        public event EventHandler<InputMessageEventArgs> InputMessageReceived;
-
-        private void RaiseInputMessageReceived(InputMessageEventArgs args)
-        {
-            InputMessageReceived?.Invoke(this, args);
-        }
-
         public bool IsMouseVisible
         {
             get => _window.CursorVisible;
             set => _window.CursorVisible = value;
         }
 
-        public GameWindow(string title, int x, int y, int width, int height, GraphicsBackend? preferredBackend, SDL_WindowFlags windowFlags = 0)
+        public float WindowScale { get; private set; }
+
+        public InputSnapshot CurrentInputSnapshot { get; private set; }
+
+        public Queue<InputMessage> MessageQueue { get; } = new Queue<InputMessage>();
+
+        public bool Fullscreen
         {
-            _window = new Sdl2Window(title, x, y, width, height, windowFlags | SDL_WindowFlags.OpenGL, false);
+            get => _window.WindowState == WindowState.BorderlessFullScreen;
+            set => _window.WindowState = value ? WindowState.BorderlessFullScreen : WindowState.Normal;
+        }
+
+        public bool Maximized
+        {
+            get { return _window.WindowState == WindowState.Maximized; }
+            set { _window.WindowState = value ? WindowState.Maximized : WindowState.Normal; }
+        }
+
+        internal GameWindow(string title, int x, int y, int width, int height,
+                            GraphicsBackend? preferredBackend, bool fullscreen)
+        {
+#if DEBUG
+            const bool debug = true;
+#else
+            const bool debug = false;
+#endif
+
+            var graphicsDeviceOptions = new GraphicsDeviceOptions(debug, null, true, ResourceBindingModel.Improved)
+            {
+                SwapchainSrgbFormat = false,
+                PreferStandardClipSpaceYDirection = true,
+                PreferDepthRangeZeroToOne = true
+            };
+
+            var windowState = fullscreen ? WindowState.BorderlessFullScreen : WindowState.Normal;
+
+            // Get display scale for primary monitor.
+            // TODO: Track moving window to a different display,
+            // which may change the scale.
+            WindowScale = Sdl2Interop.GetDisplayScale(0);
+
+            var windowCreateInfo = new WindowCreateInfo(
+                (int)(WindowScale * x),
+                (int)(WindowScale * y),
+                (int)(WindowScale * width),
+                (int)(WindowScale * height),
+                windowState,
+                title);
+
+            var backend = preferredBackend ?? VeldridStartup.GetPlatformDefaultBackend();
+
+            VeldridStartup.CreateWindowAndGraphicsDevice(
+                windowCreateInfo,
+                graphicsDeviceOptions,
+                backend,
+                out _window,
+                out var graphicsDevice);
+
+            GraphicsDevice = AddDisposable(graphicsDevice);
 
             _window.KeyDown += HandleKeyDown;
             _window.KeyUp += HandleKeyUp;
@@ -65,31 +113,6 @@ namespace OpenSage
             _window.Resized += HandleResized;
 
             _window.Closing += HandleClosing;
-
-#if DEBUG
-            const bool debug = true;
-#else
-            const bool debug = false;
-#endif
-
-            var graphicsDeviceOptions = new GraphicsDeviceOptions(debug, PixelFormat.D32_Float_S8_UInt, true)
-            {
-                ResourceBindingModel = ResourceBindingModel.Improved
-            };
-
-            if (preferredBackend != null)
-            {
-                GraphicsDevice = AddDisposable(VeldridStartup.CreateGraphicsDevice(
-                    _window,
-                    graphicsDeviceOptions,
-                    preferredBackend.Value));
-            }
-            else
-            {
-                GraphicsDevice = AddDisposable(VeldridStartup.CreateGraphicsDevice(
-                    _window,
-                    graphicsDeviceOptions));
-            }
         }
 
         private void HandleClosing()
@@ -108,14 +131,14 @@ namespace OpenSage
 
         private void HandleKeyDown(KeyEvent evt)
         {
-            var message = InputMessage.CreateKeyDown(evt.Key);
-            _messageQueue.Enqueue(message);
+            var message = InputMessage.CreateKeyDown(evt.Key, evt.Modifiers);
+            MessageQueue.Enqueue(message);
         }
 
         private void HandleKeyUp(KeyEvent evt)
         {
-            var message = InputMessage.CreateKeyUp(evt.Key);
-            _messageQueue.Enqueue(message);
+            var message = InputMessage.CreateKeyUp(evt.Key, evt.Modifiers);
+            MessageQueue.Enqueue(message);
         }
 
         private void HandleMouseDown(MouseEvent evt)
@@ -142,7 +165,7 @@ namespace OpenSage
             }
 
             var message = InputMessage.CreateMouseButton(messageType.Value, new Point2D(_lastMouseX, _lastMouseY));
-            _messageQueue.Enqueue(message);
+            MessageQueue.Enqueue(message);
         }
 
         private void HandleMouseUp(MouseEvent evt)
@@ -169,7 +192,7 @@ namespace OpenSage
             }
 
             var message = InputMessage.CreateMouseButton(messageType.Value, new Point2D(_lastMouseX, _lastMouseY));
-            _messageQueue.Enqueue(message);
+            MessageQueue.Enqueue(message);
         }
 
         private void HandleMouseMove(MouseMoveEventArgs args)
@@ -178,21 +201,19 @@ namespace OpenSage
             _lastMouseY = args.State.Y;
 
             var message = InputMessage.CreateMouseMove(new Point2D(args.State.X, args.State.Y));
-            _messageQueue.Enqueue(message);
+            MessageQueue.Enqueue(message);
         }
 
         private void HandleMouseWheel(MouseWheelEventArgs args)
         {
             var message = InputMessage.CreateMouseWheel((int) (args.WheelDelta * 100));
-            _messageQueue.Enqueue(message);
+            MessageQueue.Enqueue(message);
         }
 
-        public void SetCursor(Cursor cursor)
+        public void Close()
         {
-            // TODO
+            _closing = true;
         }
-
-        public InputSnapshot CurrentInputSnapshot { get; private set; }
 
         public bool PumpEvents()
         {
@@ -201,11 +222,6 @@ namespace OpenSage
             if (_closing)
             {
                 return false;
-            }
-
-            while (_messageQueue.Count > 0)
-            {
-                RaiseInputMessageReceived(new InputMessageEventArgs(_messageQueue.Dequeue()));
             }
 
             return true;

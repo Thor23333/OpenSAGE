@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using OpenSage.Data;
+using OpenSage.Data.Ini;
 using OpenSage.Mods.BuiltIn;
 using Xunit.Abstractions;
 
@@ -9,28 +11,27 @@ namespace OpenSage.Tests.Data
 {
     internal static class InstalledFilesTestData
     {
-        private static readonly IInstallationLocator Locator;
-
-        static InstalledFilesTestData()
-        {
-            Locator = new RegistryInstallationLocator();
-        }
-
         public static string GetInstallationDirectory(SageGame game)
         {
             var definition = GameDefinition.FromGame(game);
-            return Locator.FindInstallations(definition).First().Path;
+            return InstallationLocators.FindAllInstallations(definition).First().Path;
         }
 
         public static void ReadFiles(string fileExtension, ITestOutputHelper output, Action<FileSystemEntry> processFileCallback)
         {
-            var rootDirectories = GameDefinition.All
-                .SelectMany(Locator.FindInstallations)
+            ReadFiles(fileExtension, output, GameDefinition.All, processFileCallback);
+        }
+
+        public static void ReadFiles(string fileExtension, ITestOutputHelper output, IEnumerable<IGameDefinition> gameDefinitions, Action<FileSystemEntry> processFileCallback)
+        {
+            var rootDirectories = gameDefinitions
+                .SelectMany(InstallationLocators.FindAllInstallations)
                 .Select(i => i.Path)
                 .Where(x => Directory.Exists(x))
                 .ToList();
 
             var foundAtLeastOneFile = false;
+
             foreach (var rootDirectory in rootDirectories)
             {
                 using (var fileSystem = new FileSystem(rootDirectory))
@@ -52,6 +53,45 @@ namespace OpenSage.Tests.Data
             }
 
             if (rootDirectories.Count > 0 && !foundAtLeastOneFile)
+            {
+                throw new Exception($"No files were found matching file extension {fileExtension}");
+            }
+        }
+
+        public static void ReadFiles(string fileExtension, ITestOutputHelper output, Action<Game, FileSystemEntry> processFileCallback)
+        {
+            ReadFiles(fileExtension, output, GameDefinition.All, processFileCallback);
+        }
+
+        public static void ReadFiles(string fileExtension, ITestOutputHelper output, IEnumerable<IGameDefinition> gameDefinitions, Action<Game, FileSystemEntry> processFileCallback)
+        {
+            var foundAtLeastOneFile = false;
+
+            var installations = gameDefinitions
+                .SelectMany(InstallationLocators.FindAllInstallations)
+                .ToList();
+
+            foreach (var installation in installations)
+            {
+                using (var game = new Game(installation, null))
+                {
+                    foreach (var file in game.ContentManager.FileSystem.Files)
+                    {
+                        if (Path.GetExtension(file.FilePath).ToLowerInvariant() != fileExtension)
+                        {
+                            continue;
+                        }
+
+                        output.WriteLine($"Reading file {file.FilePath}.");
+
+                        processFileCallback(game, file);
+
+                        foundAtLeastOneFile = true;
+                    }
+                }
+            }
+
+            if (installations.Count > 0 && !foundAtLeastOneFile)
             {
                 throw new Exception($"No files were found matching file extension {fileExtension}");
             }

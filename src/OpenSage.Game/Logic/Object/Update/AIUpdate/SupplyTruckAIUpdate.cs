@@ -1,28 +1,32 @@
-﻿using OpenSage.Data.Ini.Parser;
+﻿using OpenSage.Data.Ini;
 
 namespace OpenSage.Logic.Object
 {
-    /// <summary>
-    /// Requires the object to have KindOf = HARVESTER.
-    /// </summary>
-    public sealed class SupplyTruckAIUpdateModuleData : AIUpdateModuleData
+    public class SupplyTruckAIUpdate : SupplyAIUpdate
     {
-        internal static new SupplyTruckAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        private SupplyTruckAIUpdateModuleData _moduleData;
 
-        private static new readonly IniParseTable<SupplyTruckAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
-            .Concat(new IniParseTable<SupplyTruckAIUpdateModuleData>
-            {
-                { "MaxBoxes", (parser, x) => x.MaxBoxes = parser.ParseInteger() },
-                { "SupplyCenterActionDelay", (parser, x) => x.SupplyCenterActionDelay = parser.ParseInteger() },
-                { "SupplyWarehouseActionDelay", (parser, x) => x.SupplyWarehouseActionDelay = parser.ParseInteger() },
-                { "SupplyWarehouseScanDistance", (parser, x) => x.SupplyWarehouseScanDistance = parser.ParseInteger() },
-                { "SuppliesDepletedVoice", (parser, x) => x.SuppliesDepletedVoice = parser.ParseAssetReference() }
-            });
+        internal SupplyTruckAIUpdate(GameObject gameObject, SupplyTruckAIUpdateModuleData moduleData) : base(gameObject, moduleData)
+        {
+            _moduleData = moduleData;
+        }
 
-        public int MaxBoxes { get; private set; }
-        public int SupplyCenterActionDelay { get; private set; }
-        public int SupplyWarehouseActionDelay { get; private set; }
-        public int SupplyWarehouseScanDistance { get; private set; }
-        public string SuppliesDepletedVoice { get; private set; }
+        internal override void Update(BehaviorUpdateContext context)
+        {
+            base.Update(context);
+        }
+    }
+
+    public sealed class SupplyTruckAIUpdateModuleData : SupplyAIUpdateModuleData
+    {
+        internal new static SupplyTruckAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+
+        private new static readonly IniParseTable<SupplyTruckAIUpdateModuleData> FieldParseTable = SupplyAIUpdateModuleData.FieldParseTable
+            .Concat(new IniParseTable<SupplyTruckAIUpdateModuleData>{});
+
+        internal override AIUpdate CreateAIUpdate(GameObject gameObject)
+        {
+            return new SupplyTruckAIUpdate(gameObject, this);
+        }
     }
 }

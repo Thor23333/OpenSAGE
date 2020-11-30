@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using OpenSage.Content.Translation;
 using OpenSage.Data.Ini;
 using OpenSage.Gui;
 using OpenSage.Gui.Wnd;
 using OpenSage.Gui.Wnd.Controls;
 using OpenSage.Mathematics;
 using SixLabors.Fonts;
+using Veldrid;
 
 namespace OpenSage.Mods.Generals.Gui
 {
@@ -29,8 +31,7 @@ namespace OpenSage.Mods.Generals.Gui
 
         public static void CreditsMenuInit(Window window, Game game)
         {
-            game.ContentManager.IniDataContext.LoadIniFile(@"Data\INI\Credits.ini");
-            var credits = game.ContentManager.IniDataContext.Credits;
+            var credits = game.AssetStore.Credits.Current;
 
             var control = window.Controls.FindControl("CreditsMenu.wnd:WinTextDraw");
 
@@ -73,7 +74,7 @@ namespace OpenSage.Mods.Generals.Gui
 
                     case CreditTextLine tl:
                         text = measureText = tl.Text.Contains(":")
-                            ? game.ContentManager.TranslationManager.Lookup(tl.Text)
+                            ? tl.Text.Translate()
                             : tl.Text;
                         break;
 
@@ -83,7 +84,7 @@ namespace OpenSage.Mods.Generals.Gui
                         break;
                 }
 
-                var font = game.ContentManager.GetOrCreateFont("Arial", fontSize, FontWeight.Normal);
+                var font = game.ContentManager.FontManager.GetOrCreateFont("Arial", fontSize, FontWeight.Normal);
                 var height = DrawingContext2D.MeasureText(measureText, font, TextAlignment.Center, control.Width).Height;
 
                 data.Items.Add(new CreditsMenuDataItem
@@ -105,7 +106,7 @@ namespace OpenSage.Mods.Generals.Gui
             var control = window.Controls.FindControl("CreditsMenu.wnd:WinTextDraw");
             var data = (CreditsMenuData) control.Tag;
 
-            var credits = game.ContentManager.IniDataContext.Credits;
+            var credits = game.AssetStore.Credits.Current;
 
             var multiplier = credits.ScrollDown ? 1 : -1;
 
@@ -120,12 +121,13 @@ namespace OpenSage.Mods.Generals.Gui
         {
             switch (message.MessageType)
             {
-                //case WndWindowMessageType.KeyDown:
-                //    if (message.Key == Key.Escape)
-                //    {
-                //        context.WindowManager.SetWindow(@"Menus\MainMenu.wnd");
-                //    }
-                //    break;
+                case WndWindowMessageType.KeyDown:
+                    if (message.Key == Key.Escape)
+                    {
+                        //Should load a loading screen
+                        context.WindowManager.SetWindow(@"Menus\MainMenu.wnd");
+                    }
+                    break;
             }
         }
 
@@ -136,9 +138,9 @@ namespace OpenSage.Mods.Generals.Gui
             foreach (var item in data.Items)
             {
                 var rect = item.Rect;
-                rect.Y += data.CurrentY;
+                rect = rect.WithY(rect.Y + data.CurrentY);
 
-                if (!control.ClientRectangle.ToRectangleF().IntersectsWith(rect))
+                if (!control.ClientRectangle.ToRectangleF().Intersects(rect))
                 {
                     continue;
                 }

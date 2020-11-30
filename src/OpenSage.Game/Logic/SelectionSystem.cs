@@ -1,9 +1,12 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Numerics;
 using OpenSage.Gui;
 using OpenSage.Logic.Object;
+using OpenSage.Logic.Orders;
 using OpenSage.Mathematics;
+using OpenSage.Logic.OrderGenerators;
 
 namespace OpenSage.Logic
 {
@@ -22,7 +25,6 @@ namespace OpenSage.Logic
         private const int BoxSelectionMinimumSize = 30;
 
         private SelectionGui SelectionGui => Game.Scene3D.SelectionGui;
-        private readonly List<GameObject> _selectedObjects;
 
         private Point2D _startPoint;
         private Point2D _endPoint;
@@ -42,9 +44,11 @@ namespace OpenSage.Logic
             }
         }
 
-        public SelectionSystem(Game game) : base(game)
+        public SelectionSystem(Game game) : base(game) { }
+
+        public void OnHoverSelection(Point2D point)
         {
-            _selectedObjects = new List<GameObject>();
+            Game.Scene3D.LocalPlayer.HoveredUnit = FindClosestObject(point.ToVector2());
         }
 
         public void OnStartDragSelection(Point2D startPoint)
@@ -70,13 +74,12 @@ namespace OpenSage.Logic
             }
 
             SelectionGui.SelectionRectangle = rect;
+
+            Game.Scene3D.LocalPlayer.HoveredUnit = null;
         }
 
         public void OnEndDragSelection()
         {
-            _selectedObjects.Clear();
-            SelectionGui.SelectedObjects.Clear();
-
             if (Status == SelectionStatus.SingleSelecting)
             {
                 SingleSelect();
@@ -90,9 +93,63 @@ namespace OpenSage.Logic
             Status = SelectionStatus.NotSelecting;
         }
 
-        private void SingleSelect()
+        public void SetSelectedObjects(Player player, GameObject[] objects, bool playAudio = true)
         {
-            var ray = Game.Scene3D.Camera.ScreenPointToRay(new Vector2(_startPoint.X, _startPoint.Y));
+            player.SelectUnits(objects);
+
+            if (player == Game.Scene3D.LocalPlayer)
+            {
+                if (CanSetRallyPoint(objects))
+                {
+                    Game.OrderGenerator.ActiveGenerator = new RallyPointOrderGenerator();
+                }
+                else
+                {
+                    Game.OrderGenerator.ActiveGenerator = new UnitOrderGenerator(Game);
+                }
+
+                if (playAudio)
+                {
+                    //TODO: handle hordes properly
+                    objects[0].OnLocalSelect(Game.Audio);
+                }
+            }
+        }
+
+        private bool CanSetRallyPoint(GameObject[] objects)
+        {
+            foreach (var unit in objects)
+            {
+                if (unit.Definition.KindOf.Get(ObjectKinds.AutoRallyPoint))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public void SetRallyPointForSelectedObjects(Player player, GameObject[] objects, Vector3 rallyPoint)
+        {
+            foreach (var obj in objects)
+            {
+                obj.RallyPoint = rallyPoint;
+            }
+        }
+
+        public void ClearSelectedObjectsForLocalPlayer()
+        {
+            ClearSelectedObjects(Game.Scene3D.LocalPlayer);
+        }
+
+        public void ClearSelectedObjects(Player player)
+        {
+            player.DeselectUnits();
+        }
+
+        internal GameObject FindClosestObject(Vector2 point)
+        {
+            var ray = Game.Scene3D.Camera.ScreenPointToRay(point);
 
             var closestDepth = float.MaxValue;
             GameObject closestObject = null;
@@ -111,18 +168,31 @@ namespace OpenSage.Logic
                 }
             }
 
+            return closestObject;
+        }
+
+        private void SingleSelect()
+        {
+            var closestObject = FindClosestObject(_startPoint.ToVector2());
+
+            var playerId = Game.Scene3D.GetPlayerIndex(Game.Scene3D.LocalPlayer);
+            Game.NetworkMessageBuffer?.AddLocalOrder(Order.CreateClearSelection(playerId));
+
             if (closestObject != null)
             {
-                _selectedObjects.Add(closestObject);
-                SelectionGui.SelectedObjects.Add(closestObject.Collider);
+                var objectId = (uint) Game.Scene3D.GameObjects.GetObjectId(closestObject);
+                Game.NetworkMessageBuffer?.AddLocalOrder(Order.CreateSetSelection(playerId, objectId));
             }
         }
 
         private void MultiSelect()
         {
             var boxFrustum = GetSelectionFrustum(SelectionRect);
+            var selectedObjects = new List<uint>();
 
-            // TODO: Optimize with a quadtree / use frustum culling?
+            uint? structure = null;
+
+            // TODO: Optimize with frustum culling?
             foreach (var gameObject in Game.Scene3D.GameObjects.Items)
             {
                 if (!gameObject.IsSelectable || gameObject.Collider == null)
@@ -130,14 +200,34 @@ namespace OpenSage.Logic
                     continue;
                 }
 
-                // TODO: Support other colliders
+                //only allow own objects to be drag selected
+                if (gameObject.Owner != Game.Scene3D.LocalPlayer)
+                {
+                    continue;
+                }
+
                 if (gameObject.Collider.Intersects(boxFrustum))
                 {
-                    _selectedObjects.Add(gameObject);
-                    SelectionGui.SelectedObjects.Add(gameObject.Collider);
+                    var objectId = (uint) Game.Scene3D.GameObjects.GetObjectId(gameObject);
+
+                    if (gameObject.Definition.KindOf.Get(ObjectKinds.Structure) == false)
+                    {
+                        selectedObjects.Add(objectId);
+                    }
+                    else if (gameObject.Definition.KindOf.Get(ObjectKinds.Structure) == true)
+                    {
+                        structure ??= objectId;
+                    }
                 }
             }
+
+            if (selectedObjects.Count == 0 && structure.HasValue) selectedObjects.Add(structure.Value);
+
+            var playerId = Game.Scene3D.GetPlayerIndex(Game.Scene3D.LocalPlayer);
+            Game.NetworkMessageBuffer?.AddLocalOrder(Order.CreateClearSelection(playerId));
+            Game.NetworkMessageBuffer?.AddLocalOrder(Order.CreateSetSelection(playerId, selectedObjects));
         }
+
 
         private static bool UseBoxSelection(Rectangle rect)
         {

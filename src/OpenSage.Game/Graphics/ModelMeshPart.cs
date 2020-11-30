@@ -1,23 +1,37 @@
-﻿using OpenSage.Graphics.Effects;
+﻿using Veldrid;
 
 namespace OpenSage.Graphics
 {
     public sealed class ModelMeshPart
     {
-        public uint StartIndex { get; }
-        public uint IndexCount { get; }
+        public readonly uint StartIndex;
+        public readonly uint IndexCount;
 
-        public MeshMaterial Material { get; }
+        public readonly DeviceBuffer TexCoordVertexBuffer;
+
+        public readonly bool BlendEnabled;
+        public readonly Pipeline Pipeline;
+        public readonly Pipeline PipelineBlend;
+        public readonly ResourceSet MaterialResourceSet;
 
         internal ModelMeshPart(
+            DeviceBuffer texCoordVertexBuffer,
             uint startIndex, 
-            uint indexCount, 
-            MeshMaterial material)
+            uint indexCount,
+            bool blendEnabled,
+            Pipeline pipeline,
+            Pipeline pipelineBlend,
+            ResourceSet materialResourceSet)
         {
+            TexCoordVertexBuffer = texCoordVertexBuffer;
+
             StartIndex = startIndex;
             IndexCount = indexCount;
 
-            Material = material;
+            BlendEnabled = blendEnabled;
+            Pipeline = pipeline;
+            PipelineBlend = pipelineBlend;
+            MaterialResourceSet = materialResourceSet;
         }
     }
 }

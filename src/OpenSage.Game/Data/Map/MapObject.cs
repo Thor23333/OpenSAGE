@@ -1,14 +1,16 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using System.Numerics;
-using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Map
 {
+    [DebuggerDisplay("{TypeName} ({Position})")]
     public sealed class MapObject : Asset
     {
         public const string AssetName = "Object";
 
-        public Vector3 Position { get; private set; }
+        public Vector3 Position { get; set; }
 
         /// <summary>
         /// Angle of the object in radians.

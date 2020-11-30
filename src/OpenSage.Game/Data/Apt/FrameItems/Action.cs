@@ -1,7 +1,5 @@
-﻿﻿using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using OpenSage.Gui.Apt.ActionScript;
-using OpenSage.Gui.Apt.ActionScript.Opcodes;
 
 namespace OpenSage.Data.Apt.FrameItems
 {
@@ -12,8 +10,8 @@ namespace OpenSage.Data.Apt.FrameItems
         public static Action Parse(BinaryReader reader)
         {
             var action = new Action();
-            action.Instructions = new InstructionCollection(reader.BaseStream);
-            action.Instructions.Parse();
+            var instructionsPosition = reader.ReadUInt32();
+            action.Instructions = InstructionCollection.Parse(reader.BaseStream, instructionsPosition);
             return action;
         }
     }

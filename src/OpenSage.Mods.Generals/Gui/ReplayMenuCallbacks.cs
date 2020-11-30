@@ -1,10 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using OpenSage.Data;
 using OpenSage.Data.Rep;
 using OpenSage.Gui.Wnd;
 using OpenSage.Gui.Wnd.Controls;
+using OpenSage.Logic;
+using OpenSage.Mathematics;
 using OpenSage.Network;
 
 namespace OpenSage.Mods.Generals.Gui
@@ -30,11 +31,12 @@ namespace OpenSage.Mods.Generals.Gui
                         file.FilePath,
                         new[]
                         {
-                            replayFile.Header.Filename, // Path.GetFileNameWithoutExtension(file.FilePath),
+                            Path.GetFileNameWithoutExtension(file.FilePath),
                             $"{replayFile.Header.Timestamp.Hour.ToString("D2")}:{replayFile.Header.Timestamp.Minute.ToString("D2")}",
                             replayFile.Header.Version,
                             replayFile.Header.Metadata.MapFile.Replace("maps/", string.Empty)
-                        }));
+                        },
+                        ColorRgbaF.White));
                 }
 
                 listBox.Items = newItems.ToArray();
@@ -57,24 +59,14 @@ namespace OpenSage.Mods.Generals.Gui
                             // TODO: Handle no selected item.
 
                             var listBox = (ListBox) control.Window.Controls.FindControl("ReplayMenu.wnd:ListboxReplayFiles");
-                            ReplayFile replayFile;
                             using (var fileSystem = GetReplaysFileSystem(context.Game))
                             {
                                 var replayFileEntry = fileSystem.GetFile((string) listBox.Items[listBox.SelectedIndex].DataItem);
-                                replayFile = ReplayFile.FromFileSystemEntry(replayFileEntry);
+
+                                context.Game.Scene2D.WndWindowManager.PopWindow();
+
+                                context.Game.LoadReplayFile(replayFileEntry);
                             }
-
-                            // TODO: This probably isn't right.
-                            var mapFilenameParts = replayFile.Header.Metadata.MapFile.Split('/');
-                            var mapFilename = $"Maps\\{mapFilenameParts[1]}\\{mapFilenameParts[1]}.map";
-
-                            context.Game.Scene2D.WndWindowManager.PopWindow();
-
-                            context.Game.StartGame(
-                                mapFilename,
-                                new ReplayConnection(replayFile),
-                                new[] { "America", "Observer" }, // TODO
-                                0);
 
                             break;
 

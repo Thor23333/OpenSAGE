@@ -1,6 +1,4 @@
-﻿using OpenSage.Graphics.Rendering;
-
-namespace OpenSage
+﻿namespace OpenSage
 {
     public abstract class GameSystem : DisposableBase
     {
@@ -25,25 +23,11 @@ namespace OpenSage
         /// <summary>
         /// Override this to perform any required setup.
         /// </summary>
-        public virtual void Initialize()
-        {
-
-        }
+        public virtual void Initialize() { }
 
         /// <summary>
         /// Override this method to process game logic.
         /// </summary>
-        public virtual void Update(GameTime gameTime)
-        {
-        }
-
-        /// <summary>
-        /// Override this method with rendering code.
-        /// </summary>
-        public virtual void Draw(GameTime gameTime)
-        {
-        }
-
-        internal virtual void BuildRenderList(RenderList renderList) { }
+        public virtual void LogicTick(ulong frame) { }
     }
 }

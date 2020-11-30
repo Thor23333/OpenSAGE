@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Map
 {
@@ -109,6 +110,19 @@ namespace OpenSage.Data.Map
                     PlayerScripts.WriteTo(writer, assetNames);
                 }
             });
+        }
+
+        internal void Load(BinaryReader reader)
+        {
+            var numSides = reader.ReadUInt32();
+            for (var i = 0; i < numSides; i++)
+            {
+                var hasScripts = reader.ReadBooleanChecked();
+                if (hasScripts)
+                {
+                    PlayerScripts.ScriptLists[i].Load(reader);
+                }
+            }
         }
     }
 }

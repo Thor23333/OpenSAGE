@@ -24,7 +24,10 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            var a = context.Pop();
+            var b = context.Pop();
+
+            context.Push(Value.FromFloat(b.ToFloat() - a.ToFloat()));
         }
     }
 
@@ -37,15 +40,18 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            //pop two values
-            var a = context.Stack.Pop().ResolveRegister(context);
-            var b = context.Stack.Pop().ResolveRegister(context);
+            //Pop two values
+            var a = context.Pop();
+            var b = context.Pop();
 
-            if (!(a.Type == ValueType.String || a.Type == ValueType.Undefined) ||
-                !(b.Type == ValueType.String || b.Type == ValueType.Undefined))
-                throw new NotImplementedException();
-
-            context.Stack.Push(Value.FromString(b.ToString() + a.ToString()));
+            if (a.IsNumericType() && b.IsNumericType())
+            {
+                context.Push(Value.FromInteger(b.ToInteger() + a.ToInteger()));
+            }
+            else
+            {
+                context.Push(Value.FromString(b.ToString() + a.ToString()));
+            }
         }
     }
 
@@ -76,28 +82,11 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
     }
 
     /// <summary>
-    /// Pop two values from stack and check them for equality. Does work with types. Result on stack
+    /// Pop two values from stack, convert them to float and then divide them. Result on stack
     /// </summary>
-    public sealed class Equals2 : InstructionBase
+    public sealed class Modulo : InstructionBase
     {
-        public override InstructionType Type => InstructionType.Equals2;
-
-        public override void Execute(ActionContext context)
-        {
-            var a = context.Stack.Pop();
-            var b = context.Stack.Pop();
-            bool eq = a.Equals(b);
-            context.Stack.Push(Value.FromBoolean(eq));
-
-        }
-    }
-
-    /// <summary>
-    /// Pop two values from stack and check them for equality. Does work with strings. Result on stack
-    /// </summary>
-    public sealed class LessThan2 : InstructionBase
-    {
-        public override InstructionType Type => InstructionType.LessThan2;
+        public override InstructionType Type => InstructionType.Modulo;
 
         public override void Execute(ActionContext context)
         {
@@ -111,6 +100,30 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
     public sealed class Increment : InstructionBase
     {
         public override InstructionType Type => InstructionType.Increment;
+
+        public override void Execute(ActionContext context)
+        {
+            var num = context.Pop().ToInteger();
+            context.Push(Value.FromInteger(++num));
+        }
+    }
+
+    /// <summary>
+    /// Pop a value from stack, increments it and pushes it back
+    /// </summary>
+    public sealed class Decrement : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.Decrement;
+
+        public override void Execute(ActionContext context)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public sealed class ShiftRight2 : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.ShiftRight2;
 
         public override void Execute(ActionContext context)
         {

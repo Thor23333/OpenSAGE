@@ -70,14 +70,37 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
     public sealed class GotoFrame2 : InstructionBase
     {
         public override InstructionType Type => InstructionType.GotoFrame2;
-        public override uint Size => 1;
+        public override uint Size => 4;
 
         public override void Execute(ActionContext context)
         {
             bool play = Convert.ToBoolean(Parameters[0].ToInteger() & 0x01);
-            var frame = context.Stack.Pop();
+            var frame = context.Pop();
 
-            throw new InvalidOperationException();           
+            if (context.Scope.Item is SpriteItem si)
+            {
+                if (frame.Type == ValueType.String)
+                {
+                    si.Goto(frame.ToString());
+                }
+                else
+                {
+                    si.GotoFrame(frame.ToInteger());
+                }
+
+                if (play)
+                {
+                    si.Play();
+                }
+                else
+                {
+                    si.Stop();
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException();
+            }
         }
     }
 

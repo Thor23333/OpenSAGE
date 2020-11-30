@@ -1,7 +1,6 @@
 ﻿using System.IO;
-using OpenSage.Data;
-using OpenSage.Data.Big;
-using OpenSage.Data.W3d;
+using OpenSage.FileFormats.Big;
+using OpenSage.FileFormats.W3d;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -17,17 +16,17 @@ namespace OpenSage.Tests.Data.W3d
         }
 
         [Fact]
-        public void CanReadW3dFiles()
+        public void CanRoundtripW3dFiles()
         {
             InstalledFilesTestData.ReadFiles(".w3d", _output, entry =>
             {
-                switch (Path.GetFileName(entry.FilePath))
+                switch (Path.GetFileName(entry.FilePath).ToLower())
                 {
-                    case "UISabotr_idel.w3d":
-                    case "UISabotr_Jump.w3d":
-                    case "UISabotr_Left.w3d":
-                    case "UISabotr_Right.w3d":
-                    case "UISabotr_Up.w3d":
+                    case "uisabotr_idel.w3d":
+                    case "uisabotr_jump.w3d":
+                    case "uisabotr_left.w3d":
+                    case "uisabotr_right.w3d":
+                    case "uisabotr_up.w3d":
                     case "cusheep_grza.w3d":
                     case "gbmtwalld.w3d":
                     case "gbmtwalldramp.w3d":
@@ -38,53 +37,68 @@ namespace OpenSage.Tests.Data.W3d
                     case "gugandalfcrstl.w3d":
                     case "guhbtshfb_cinb.w3d":
                     case "guhbtshfb_cinc.w3d":
+                    case "kbpostgaten_al.w3d":
+                    case "kbpostgaten_am.w3d":
                     case "lwbanhfllbst.w3d":
                     case "lwbanhnazgul.w3d":
                     case "lwbanhwtchkng.w3d":
                     case "psupplies04.w3d":
+                    case "readonly-0-rev-2-lwbanhwitchk.w3d":
                     case "wbcave_d2a.w3d":
                     case "wbcave_d2c.w3d":
+                    case "npc14b.w3d":
+                    case "npc15b.w3d":
                         return; // Corrupt, or unreferenced and contain chunks that don't exist elsewhere.
                 }
 
-                var w3dFile = W3dFile.FromFileSystemEntry(entry);
+                var w3dFile = TestUtility.DoRoundtripTest(
+                    () => entry.Open(),
+                    stream => W3dFile.FromStream(stream, entry.FilePath),
+                    (w3d, stream) => w3d.WriteTo(stream),
+                    true);
 
-                foreach (var mesh in w3dFile.Meshes)
+                foreach (var mesh in w3dFile.GetMeshes())
                 {
-                    Assert.Equal((int) mesh.Header.NumVertices, mesh.Vertices.Length);
+                    Assert.Equal((int) mesh.Header.NumVertices, mesh.Vertices.Items.Length);
 
-                    Assert.Equal((int) mesh.Header.NumTris, mesh.Triangles.Length);
+                    Assert.Equal((int) mesh.Header.NumTris, mesh.Triangles.Items.Length);
 
-                    Assert.Equal(mesh.Vertices.Length, mesh.Influences.Length);
-
-                    Assert.Equal((int) mesh.MaterialInfo.PassCount, mesh.MaterialPasses.Length);
-
-                    Assert.Equal((int) mesh.MaterialInfo.ShaderCount, mesh.Shaders.Length);
-
-                    Assert.Equal(mesh.Vertices.Length, mesh.ShadeIndices.Length);
-
-                    Assert.True(mesh.Materials.Length <= 16);
-
-                    foreach (var material in mesh.Materials)
+                    if (mesh.Influences != null)
                     {
-                        Assert.Equal(W3dVertexMaterialFlags.None, material.VertexMaterialInfo.Attributes);
-
-                        Assert.Equal(0, material.VertexMaterialInfo.Translucency);
+                        Assert.Equal(mesh.Vertices.Items.Length, mesh.Influences.Items.Length);
                     }
 
-                    Assert.True(mesh.MaterialPasses.Length <= 3);
+                    Assert.Equal((int) mesh.MaterialInfo.PassCount, mesh.MaterialPasses.Count);
 
-                    Assert.True(mesh.ShaderMaterials == null || mesh.ShaderMaterials.Materials.Count == 1);
+                    Assert.Equal((int) mesh.MaterialInfo.ShaderCount, mesh.Shaders?.Items.Count ?? 0);
+
+                    Assert.Equal(mesh.Vertices.Items.Length, mesh.ShadeIndices.Items.Length);
+
+                    if (mesh.VertexMaterials != null)
+                    {
+                        Assert.True(mesh.VertexMaterials.Items.Count <= 16);
+
+                        foreach (var material in mesh.VertexMaterials.Items)
+                        {
+                            Assert.Equal(W3dVertexMaterialFlags.None, material.Info.Attributes);
+
+                            Assert.Equal(0, material.Info.Translucency);
+                        }
+                    }
+
+                    Assert.True(mesh.MaterialPasses.Count <= 3);
+
+                    Assert.True(mesh.ShaderMaterials == null || mesh.ShaderMaterials.Items.Count == 1);
 
                     if (mesh.ShaderMaterials != null)
                     {
-                        Assert.Empty(mesh.Materials);
+                        Assert.Null(mesh.VertexMaterials);
                         Assert.Single(mesh.MaterialPasses);
                     }
 
                     foreach (var materialPass in mesh.MaterialPasses)
                     {
-                        Assert.True(materialPass.Dcg == null || materialPass.Dcg.Length == mesh.Vertices.Length);
+                        Assert.True(materialPass.Dcg == null || materialPass.Dcg.Items.Length == mesh.Vertices.Items.Length);
                         Assert.Null(materialPass.Dig);
                         Assert.Null(materialPass.Scg);
 
@@ -92,35 +106,38 @@ namespace OpenSage.Tests.Data.W3d
 
                         foreach (var textureStage in materialPass.TextureStages)
                         {
-                            Assert.True(textureStage.TexCoords == null || textureStage.TexCoords.Length == mesh.Header.NumVertices);
+                            Assert.True(textureStage.TexCoords == null || textureStage.TexCoords.Items.Length == mesh.Header.NumVertices);
 
                             Assert.Null(textureStage.PerFaceTexCoordIds);
 
-                            var numTextureIds = textureStage.TextureIds.Length;
+                            var numTextureIds = textureStage.TextureIds.Items.Count;
                             Assert.True(numTextureIds == 1 || numTextureIds == mesh.Header.NumTris);
                         }
 
-                        Assert.True((materialPass.ShaderIds != null && materialPass.VertexMaterialIds != null && materialPass.TexCoords == null) || materialPass.ShaderMaterialId != null);
+                        Assert.True((materialPass.ShaderIds != null && materialPass.VertexMaterialIds != null && materialPass.TexCoords == null) || materialPass.ShaderMaterialIds != null);
 
                         if (materialPass.ShaderIds != null)
                         {
-                            var numShaderIds = materialPass.ShaderIds.Length;
+                            var numShaderIds = materialPass.ShaderIds.Items.Length;
                             Assert.True(numShaderIds == 1 || numShaderIds == mesh.Header.NumTris);
                         }
 
                         if (materialPass.VertexMaterialIds != null)
                         {
-                            var numVertexMaterialIds = materialPass.VertexMaterialIds.Length;
+                            var numVertexMaterialIds = materialPass.VertexMaterialIds.Items.Length;
                             Assert.True(numVertexMaterialIds == 1 || numVertexMaterialIds == mesh.Header.NumVertices);
                         }
 
-                        Assert.True(materialPass.ShaderMaterialId == null || materialPass.ShaderMaterialId == 0);
+                        Assert.True(materialPass.ShaderMaterialIds == null || materialPass.ShaderMaterialIds.Items[0] == 0);
                     }
 
-                    Assert.True(mesh.Textures.Count <= 29);
+                    if (mesh.Textures != null)
+                    {
+                        Assert.True(mesh.Textures.Items.Count <= 29);
+                    }
                 }
 
-                foreach (var animation in w3dFile.CompressedAnimations)
+                foreach (var animation in w3dFile.GetCompressedAnimations())
                 {
                     foreach (var channel in animation.TimeCodedChannels)
                     {
@@ -144,8 +161,13 @@ namespace OpenSage.Tests.Data.W3d
             {
                 var entry = bigArchive.GetEntry(@"Art\W3D\ABBarracks_AC.W3D");
 
-                var w3dFile = W3dFile.FromFileSystemEntry(new FileSystemEntry(null, entry.FullName, entry.Length, entry.Open));
-                Assert.Equal(3, w3dFile.Meshes.Count);
+                W3dFile w3dFile;
+                using (var entryStream = entry.Open())
+                {
+                    w3dFile = W3dFile.FromStream(entryStream, entry.FullName);
+                }
+
+                Assert.Equal(3, w3dFile.GetMeshes().Count);
             }
         }
     }

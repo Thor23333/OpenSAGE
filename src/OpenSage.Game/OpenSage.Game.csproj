@@ -1,37 +1,77 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
     <RootNamespace>OpenSage</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <LangVersion>latest</LangVersion>
-    <AssetsDir>$(MSBuildThisFileDirectory)Assets</AssetsDir>
-    <ShaderOutputPath>$(MSBuildThisFileDirectory)\obj\Shaders.Generated</ShaderOutputPath>
   </PropertyGroup>
-  
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.Win32.Registry" Version="4.4.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-    <PackageReference Include="OpenAL-CS" Version="1.0.9" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.0-beta0003" />
-    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-beta0003" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="4.4.0" />
-    <PackageReference Include="System.ValueTuple" Version="4.4.0" />
-    <PackageReference Include="ShaderGen.Primitives" Version="1.2.0-g4bf25fc276" />
-    <PackageReference Include="ShaderGen.Build" Version="1.2.0-g4bf25fc276" PrivateAssets="All" />
-    <PackageReference Include="Veldrid" Version="4.2.0-beta1-gb1cbac39e2" />
-    <PackageReference Include="Veldrid.ImageSharp" Version="4.2.0-beta1-gb1cbac39e2" />
-    <PackageReference Include="Veldrid.SDL2" Version="4.2.0-beta1-gb1cbac39e2" />
-    <PackageReference Include="Veldrid.StartupUtilities" Version="4.2.0-beta1-gb1cbac39e2" />
+    <PackageReference Include="ImGui.NET" Version="1.78.0" />
+    <PackageReference Include="LiteNetLib" Version="0.9.3.2" />
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
+    <PackageReference Include="OptimizedPriorityQueue" Version="5.0.0" />
+    <PackageReference Include="protobuf-net" Version="3.0.62" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.2" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-beta0010" />
+    <PackageReference Include="SharpAudio" Version="$(SharpAudioVersion)" />
+    <PackageReference Include="SharpAudio.Codec" Version="$(SharpAudioVersion)" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="5.0.0" />
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+    <PackageReference Include="Veldrid" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.ImageSharp" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.ImGui" Version="$(ImGuiVersion)" />
+    <PackageReference Include="Veldrid.RenderDoc" Version="1.0.1" />
+    <PackageReference Include="Veldrid.SDL2" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.StartupUtilities" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.SPIRV" Version="1.0.13" />
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Graphics\Shaders\*.json" />
+    <ProjectReference Include="..\OpenSage.Core\OpenSage.Core.csproj" />
+    <ProjectReference Include="..\OpenSage.FileFormats.Big\OpenSage.FileFormats.Big.csproj" />
+    <ProjectReference Include="..\OpenSage.FileFormats.RefPack\OpenSage.FileFormats.RefPack.csproj" />
+    <ProjectReference Include="..\OpenSage.FileFormats.W3d\OpenSage.FileFormats.W3d.csproj" />
+    <ProjectReference Include="..\OpenSage.Mathematics\OpenSage.Mathematics.csproj" />
   </ItemGroup>
 
-  <Target Name="EmbedGeneratedShaderContent" AfterTargets="AssignTargetPaths">
+  <ItemGroup>
+    <Protobuf Include="Network\Protocol\lobby.proto" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <EmbeddedResource Include="Content\Fonts\*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ShaderFiles Include="Assets\Shaders\*.vert;Assets\Shaders\*.frag" />
+    <UpToDateCheckInput Include="@(ShaderFiles)" />
+
+    <ShaderHeaderFiles Include="Assets\Shaders\*.h" />
+    <UpToDateCheckInput Include="@(ShaderHeaderFiles)" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <GlslangValidatorPath>win-x64\glslangValidator.exe</GlslangValidatorPath>
+    <GlslangValidatorPath Condition="$([MSBuild]::IsOsPlatform('osx'))">osx-x64\glslangValidator</GlslangValidatorPath>
+    <GlslangValidatorPath Condition="$([MSBuild]::IsOsPlatform('linux'))">linux-x64\glslangValidator</GlslangValidatorPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Content\Fonts\FontFallbackSettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CompileShaders" BeforeTargets="BeforeBuild" Inputs="@(ShaderFiles);@(ShaderHeaderFiles)" Outputs="@(ShaderFiles->'$(IntermediateOutputPath)Assets\Shaders\%(FileName)%(Extension).spv')">
+    <MakeDir Directories="$(IntermediateOutputPath)Assets\Shaders" />
+    <Exec Command="&quot;$(MSBuildThisFileDirectory)..\..\lib\$(GlslangValidatorPath)&quot; -I'.' -V %(ShaderFiles.Identity) -o &quot;$(IntermediateOutputPath)Assets\Shaders\%(ShaderFiles.FileName)%(ShaderFiles.Extension).spv&quot;" />
+  </Target>
+
+  <Target Name="EmbedShaders" AfterTargets="CompileShaders">
     <ItemGroup>
-      <EmbeddedResource Include="@(GeneratedShader)">
-         <LogicalName>OpenSage.Graphics.Shaders.Compiled.%(FileName)%(Extension)</LogicalName>
+      <CompiledShaderFiles Include="$(IntermediateOutputPath)Assets\Shaders\*.*" />
+      <EmbeddedResource Include="@(CompiledShaderFiles)">
+        <LogicalName>OpenSage.Assets.Shaders.%(FileName)%(Extension)</LogicalName>
       </EmbeddedResource>
     </ItemGroup>
   </Target>

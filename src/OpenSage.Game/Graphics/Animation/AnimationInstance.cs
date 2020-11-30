@@ -1,42 +1,57 @@
 ﻿using System;
 using System.Numerics;
+using OpenSage.Logic.Object;
 using OpenSage.Mathematics;
 
 namespace OpenSage.Graphics.Animation
 {
     public sealed class AnimationInstance
     {
-        private readonly int[] _keyframeIndices;
+        private GameObject _gameObject;
 
+        private readonly int[] _keyframeIndices;
         private readonly ModelBoneInstance[] _boneInstances;
+        private readonly W3DAnimation _animation;
 
         private TimeSpan _currentTimeValue;
 
         private bool _playing;
+        private readonly AnimationMode _mode;
+        private readonly AnimationFlags _flags;
 
-        public Animation Animation { get; }
+        private float _speedFactor;
 
-        public AnimationInstance(ModelInstance modelInstance, Animation animation)
+        private bool Looping => _mode == AnimationMode.Loop || _mode == AnimationMode.LoopBackwards;
+        private bool Reverse => _mode == AnimationMode.OnceBackwards || _mode == AnimationMode.LoopBackwards;
+        private bool Manual => _mode == AnimationMode.Manual;
+
+        public AnimationInstance(ModelInstance modelInstance, W3DAnimation animation,
+            AnimationMode mode, AnimationFlags flags, GameObject gameObject)
         {
-            Animation = animation;
-
+            _gameObject = gameObject;
+            _animation = animation;
+            _mode = mode;
+            _flags = flags;
             _boneInstances = modelInstance.ModelBoneInstances;
 
             _keyframeIndices = new int[animation.Clips.Length];
-            _currentTimeValue = TimeSpan.Zero;
         }
 
-        public void Play()
+        public void Play(float speedFactor = 1.0f)
         {
+            _speedFactor = speedFactor;
             if (_playing)
             {
                 return;
             }
 
+            ResetTimeStamps();
             ResetBoneTransforms();
 
             _playing = true;
         }
+
+        public bool IsPlaying() => _playing;
 
         public void Stop()
         {
@@ -50,20 +65,46 @@ namespace OpenSage.Graphics.Animation
             _playing = false;
         }
 
+        private void ResetTimeStamps()
+        {
+            if (_flags.HasFlag(AnimationFlags.StartFrameFirst) ||
+                _flags == AnimationFlags.None)
+            {
+                _currentTimeValue = TimeSpan.Zero;
+            }
+            else if (_flags.HasFlag(AnimationFlags.StartFrameLast))
+            {
+                _currentTimeValue = _animation.Duration;
+            }
+            else
+            {
+                //TODO: implement other flags
+                //throw new NotImplementedException();
+            }
+        }
+
         private void ResetBoneTransforms()
         {
             Array.Clear(_keyframeIndices, 0, _keyframeIndices.Length);
 
-            for (var i = 0; i < _boneInstances.Length; i++)
+            if (Reverse)
             {
-                _boneInstances[i].AnimatedOffset.Translation = Vector3.Zero;
-                _boneInstances[i].AnimatedOffset.Rotation = Quaternion.Identity;
+                for (var i = 0; i < _keyframeIndices.Length; i++)
+                {
+                    _keyframeIndices[i] = _animation.Clips[i].Keyframes.Length - 1;
+                }
+            }
 
-                _boneInstances[i].Visible = true;
+            foreach (var bone in _boneInstances)
+            {
+                bone.AnimatedOffset.Translation = Vector3.Zero;
+                bone.AnimatedOffset.Rotation = Quaternion.Identity;
+
+                bone.Visible = true;
             }
         }
 
-        internal void Update(GameTime gameTime)
+        internal void Update(in TimeInterval gameTime)
         {
             if (!_playing)
             {
@@ -73,20 +114,76 @@ namespace OpenSage.Graphics.Animation
             UpdateBoneTransforms(gameTime);
         }
 
-        private void UpdateBoneTransforms(GameTime gameTime)
+        private void UpdateBoneTransforms(in TimeInterval gameTime)
         {
-            var time = _currentTimeValue + gameTime.ElapsedGameTime;
+            //TODO: implement ping pong
+            var time = _currentTimeValue;
+            var deltaTime = gameTime.DeltaTime * _speedFactor;
 
-            // If we reached the end, loop back to the start.
-            while (time >= Animation.Duration)
+            if (Manual)
             {
-                time -= Animation.Duration;
+                time = _animation.Duration * _gameObject.BuildProgress * _speedFactor;
+            }
+            else
+            {
+                if (Reverse)
+                {
+                    time -= deltaTime;
+                }
+                else
+                {
+                    time += deltaTime;
+                }
             }
 
-            // If we've just moved backwards, reset the keyframe indices.
-            if (time < _currentTimeValue)
+            var reachedEnd = Reverse
+                ? time < TimeSpan.Zero
+                : time >= _animation.Duration;
+
+            if (reachedEnd)
             {
-                ResetBoneTransforms();
+                // If we reached the end, loop back to the start or stay at the last frame
+                if (Looping)
+                {
+                    if (Reverse)
+                    {
+                        while (time < TimeSpan.Zero)
+                        {
+                            time += _animation.Duration;
+                        }
+
+                        // If we've just moved forwards, reset the keyframe indices.
+                        if (time > _currentTimeValue)
+                        {
+                            ResetBoneTransforms();
+                        }
+                    }
+                    else
+                    {
+                        while (time >= _animation.Duration)
+                        {
+                            time -= _animation.Duration;
+                        }
+
+                        // If we've just moved backwards, reset the keyframe indices.
+                        if (time < _currentTimeValue)
+                        {
+                            ResetBoneTransforms();
+                        }
+                    }
+                }
+                else
+                {
+                    _playing = false;
+                    if (Reverse)
+                    {
+                        time = TimeSpan.Zero;
+                    }
+                    else
+                    {
+                        time = _animation.Duration;
+                    }
+                }
             }
 
             _currentTimeValue = time;
@@ -94,30 +191,52 @@ namespace OpenSage.Graphics.Animation
             Keyframe? previous;
             Keyframe? next;
 
-            for (var i = 0; i < Animation.Clips.Length; i++)
+            for (var i = 0; i < _animation.Clips.Length; i++)
             {
-                previous = null;
                 next = null;
 
-                var clip = Animation.Clips[i];
+                var clip = _animation.Clips[i];
 
                 if (clip.Bone >= _boneInstances.Length)
                 {
                     continue;
                 }
 
-                for (var j = _keyframeIndices[i]; j < clip.Keyframes.Length; j++)
+                // In case we're beyond the animation bounds,
+                // default to the end.
+                previous = clip.Keyframes[_keyframeIndices[i]];
+
+                if (Reverse)
                 {
-                    var keyframe = clip.Keyframes[j];
-
-                    if (keyframe.Time > _currentTimeValue)
+                    for (var j = _keyframeIndices[i]; j >= 0; j--)
                     {
-                        next = keyframe;
-                        break;
-                    }
+                        var keyframe = clip.Keyframes[j];
 
-                    previous = keyframe;
-                    _keyframeIndices[i] = j;
+                        if (keyframe.Time < _currentTimeValue)
+                        {
+                            next = keyframe;
+                            break;
+                        }
+
+                        previous = keyframe;
+                        _keyframeIndices[i] = j;
+                    }
+                }
+                else
+                {
+                    for (var j = _keyframeIndices[i]; j < clip.Keyframes.Length; j++)
+                    {
+                        var keyframe = clip.Keyframes[j];
+
+                        if (keyframe.Time > _currentTimeValue)
+                        {
+                            next = keyframe;
+                            break;
+                        }
+
+                        previous = keyframe;
+                        _keyframeIndices[i] = j;
+                    }
                 }
 
                 if (previous != null)
@@ -170,7 +289,7 @@ namespace OpenSage.Graphics.Animation
                     break;
 
                 case AnimationClipType.Quaternion:
-                    _boneInstances[clip.Bone].AnimatedOffset.Rotation = Quaternion.Lerp(
+                    _boneInstances[clip.Bone].AnimatedOffset.Rotation = Quaternion.Slerp(
                         previous.Value.Quaternion,
                         next.Value.Quaternion,
                         amount);

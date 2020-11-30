@@ -1,6 +1,9 @@
 ﻿using System.Collections.Generic;
+using OpenSage.Content;
 using OpenSage.Data;
 using OpenSage.Gui;
+using OpenSage.Gui.ControlBar;
+using OpenSage.Gui.UnitOverlay;
 
 namespace OpenSage.Mods.Cnc4
 {
@@ -10,6 +13,7 @@ namespace OpenSage.Mods.Cnc4
         public string DisplayName => "Command & Conquer (tm) 4: Tiberian Twilight";
         public IGameDefinition BaseGame => null;
 
+        public bool LauncherImagePrefixLang => false;
         public string LauncherImagePath => null;
 
         public IEnumerable<RegistryKeyPath> RegistryKeys { get; } = new[]
@@ -18,11 +22,20 @@ namespace OpenSage.Mods.Cnc4
             new RegistryKeyPath(@"SOFTWARE\Electronic Arts\command and conquer 4", "install dir") // Steam
         };
 
+        public IEnumerable<RegistryKeyPath> LanguageRegistryKeys { get; }
+
         public string Identifier { get; } = "cnc4";
 
         public IMainMenuSource MainMenu { get; }
         public IControlBarSource ControlBar { get; }
+        public IUnitOverlaySource UnitOverlay => null;
+
+        public uint ScriptingTicksPerSecond => 5;
+
+        public OnDemandAssetLoadStrategy CreateAssetLoadStrategy() => OnDemandAssetLoadStrategy.None;
 
         public static Cnc4Definition Instance { get; } = new Cnc4Definition();
+
+        public string LauncherExecutable => "CNC4.exe";
     }
 }

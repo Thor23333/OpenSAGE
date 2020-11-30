@@ -1,5 +1,8 @@
 ﻿using System.Numerics;
 using OpenSage.Content;
+using OpenSage.Content.Util;
+using OpenSage.Data.Wnd;
+using OpenSage.Gui.Wnd.Images;
 using OpenSage.Mathematics;
 
 namespace OpenSage.Gui.Wnd.Controls
@@ -7,7 +10,6 @@ namespace OpenSage.Gui.Wnd.Controls
     public class Window : Control
     {
         private readonly Size _creationResolution;
-        private readonly ContentManager _contentManager;
 
         private Matrix3x2 _rootTransform;
         private Matrix3x2 _rootTransformInverse;
@@ -17,16 +19,43 @@ namespace OpenSage.Gui.Wnd.Controls
         public WindowCallback LayoutShutdown { get; set; }
 
         public Control Root { get; }
+        public Game Game { get; set; }
+        public ImageLoader ImageLoader { get; }
 
-        public Window(in Size creationResolution, Control root, ContentManager contentManager)
+        public Window(WndFile wndFile, Game game, WndCallbackResolver wndCallbackResolver)
+            : this(wndFile.RootWindow.ScreenRect.CreationResolution, game.GraphicsLoadContext)
+        {
+            Game = game;
+            Bounds = wndFile.RootWindow.ScreenRect.ToRectangle();
+            LayoutInit = wndCallbackResolver.GetWindowCallback(wndFile.LayoutBlock.LayoutInit);
+            LayoutUpdate = wndCallbackResolver.GetWindowCallback(wndFile.LayoutBlock.LayoutUpdate);
+            LayoutShutdown = wndCallbackResolver.GetWindowCallback(wndFile.LayoutBlock.LayoutShutdown);
+
+            Root = CreateRecursive(
+                wndFile.RootWindow,
+                ImageLoader,
+                game.ContentManager,
+                game.AssetStore,
+                wndCallbackResolver,
+                wndFile.RootWindow.ScreenRect.UpperLeft);
+            Controls.Add(Root);
+        }
+
+        public Window(in Size creationResolution, Control root, Game game)
+            : this(creationResolution, game.GraphicsLoadContext)
+        {
+            Root = root;
+            Controls.Add(root);
+        }
+
+        private Window(in Size creationResolution, GraphicsLoadContext loadContext)
         {
             _creationResolution = creationResolution;
-            _contentManager = contentManager;
 
             Window = this;
 
-            Root = root;
-            Controls.Add(root);
+            var imageTextureCache = AddDisposable(new ImageTextureCache(loadContext));
+            ImageLoader = new ImageLoader(imageTextureCache);
         }
 
         protected override void OnSizeChanged(in Size newSize)
@@ -65,7 +94,7 @@ namespace OpenSage.Gui.Wnd.Controls
                 control.DrawCallback(control, drawingContext);
 
                 // Draw child controls.
-                foreach (var child in control.Controls)
+                foreach (var child in control.Controls.AsList())
                 {
                     drawControlRecursive(child);
                 }

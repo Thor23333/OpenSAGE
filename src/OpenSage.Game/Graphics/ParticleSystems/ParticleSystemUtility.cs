@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Numerics;
-using OpenSage.Data.Ini;
 using OpenSage.Mathematics;
 
 namespace OpenSage.Graphics.ParticleSystems
@@ -11,42 +10,30 @@ namespace OpenSage.Graphics.ParticleSystems
 
         public static float GetRandomFloat(float min, float max)
         {
-            return GetRandomFloat(new RandomVariable
-            {
-                Low = min,
-                High = max,
-                DistributionType = DistributionType.Uniform
-            });
+            return GetRandomFloat(new RandomVariable(min, max, DistributionType.Uniform));
         }
 
         public static float GetRandomFloat(this RandomVariable variable)
         {
-            if (variable.Low == variable.High)
+            var min = variable.Low;
+            var max = variable.High;
+
+            if (min == max)
             {
-                return variable.Low;
+                return min;
             }
 
-            float min, max;
-            // TODO: Is this ever not the case?
-            if (variable.Low <= variable.High)
+            // This is how the original engine behaves.
+            if (max < min)
             {
-                min = variable.Low;
-                max = variable.High;
-            }
-            else
-            {
-                min = variable.High;
-                max = variable.Low;
+                return max;
             }
 
-            switch (variable.DistributionType)
+            return variable.DistributionType switch
             {
-                case DistributionType.Uniform:
-                    return min + ((float) Random.NextDouble() * (max - min));
-
-                default:
-                    throw new NotSupportedException();
-            }
+                DistributionType.Uniform => min + ((float) Random.NextDouble() * (max - min)),
+                _ => throw new NotSupportedException(),
+            };
         }
 
         public static int GetRandomInt(this RandomVariable variable)
@@ -64,14 +51,14 @@ namespace OpenSage.Graphics.ParticleSystems
         {
             float azimuth = GetRandomAngle();
             return new Vector2(
-                MathUtility.Cos(azimuth), 
-                MathUtility.Sin(azimuth));
+                MathF.Cos(azimuth), 
+                MathF.Sin(azimuth));
         }
 
         public static Vector3 GetRandomDirection3D()
         {
             float z = (2 * (float) Random.NextDouble()) - 1; // z is in the range [-1,1]
-            var planar = GetRandomDirection2D() * MathUtility.Sqrt(1 - z * z);
+            var planar = GetRandomDirection2D() * MathF.Sqrt(1 - z * z);
             return new Vector3(planar.X, planar.Y, z);
         }
     }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Apt
 {
@@ -44,7 +45,7 @@ namespace OpenSage.Data.Apt
                     };
 
                     //read the number/ string offset
-                   
+
 
                     switch (constEntry.Type)
                     {

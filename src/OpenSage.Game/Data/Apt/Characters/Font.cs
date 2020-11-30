@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Apt.Characters
 {
@@ -30,13 +26,13 @@ namespace OpenSage.Data.Apt.Characters
             reader.BaseStream.Seek(glyphOffset, SeekOrigin.Begin);
 
             font.Glyphs = new List<uint>();
-            for (int i=0;i<glyphCount;++i)
+            for (int i = 0; i < glyphCount; ++i)
             {
-                font.Glyphs.Add(reader.ReadUInt32()); 
+                font.Glyphs.Add(reader.ReadUInt32());
             }
 
             reader.BaseStream.Seek(currentPos, SeekOrigin.Begin);
-           
+
 
             return font;
         }

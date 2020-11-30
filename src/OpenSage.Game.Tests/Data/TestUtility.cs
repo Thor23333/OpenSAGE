@@ -1,11 +1,12 @@
 ﻿using System;
 using System.IO;
+using Xunit;
 
 namespace OpenSage.Tests.Data
 {
     internal static class TestUtility
     {
-        public static void DoRoundtripTest<T>(
+        public static T DoRoundtripTest<T>(
             Func<Stream> getOriginalStream,
             Func<Stream, T> parseCallback,
             Action<T, Stream> serializeCallback,
@@ -19,10 +20,18 @@ namespace OpenSage.Tests.Data
                 originalUncompressedBytes = originalUncompressedStream.ToArray();
             }
 
-            T parsedFile;
-            using (var entryStream = new MemoryStream(originalUncompressedBytes, false))
+            T parsedFile = default;
+            try
             {
-                parsedFile = parseCallback(entryStream);
+                using (var entryStream = new MemoryStream(originalUncompressedBytes, false))
+                {
+                    parsedFile = parseCallback(entryStream);
+                }
+            }
+            catch
+            {
+                File.WriteAllBytes("original.bin", originalUncompressedBytes);
+                throw;
             }
 
             byte[] serializedBytes;
@@ -32,13 +41,20 @@ namespace OpenSage.Tests.Data
                 serializedBytes = serializedStream.ToArray();
             }
 
+            if (originalUncompressedBytes.Length != serializedBytes.Length)
+            {
+                File.WriteAllBytes("original.bin", originalUncompressedBytes);
+                File.WriteAllBytes("serialized.bin", serializedBytes);
+            }
+
+            Assert.Equal(originalUncompressedBytes.Length, serializedBytes.Length);
+
             if (!skipRoundtripEqualityTest)
             {
-                //File.WriteAllBytes("original.bin", originalUncompressedBytes);
-                //File.WriteAllBytes("serialized.bin", serializedBytes);
-
                 AssertUtility.Equal(originalUncompressedBytes, serializedBytes);
             }
+
+            return parsedFile;
         }
     }
 }

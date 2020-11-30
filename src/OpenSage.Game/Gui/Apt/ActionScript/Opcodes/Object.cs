@@ -18,10 +18,17 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
             var member = context.Scope.Constants[id].ToString();
 
             //pop the object
-            var objectVal = context.Stack.Pop();
+            var objectVal = context.Pop();
+            var obj = objectVal.ToObject();
 
-            var valueVal = objectVal.ResolveRegister(context).ToObject().GetMember(member);
-            context.Stack.Push(valueVal);
+            if (obj != null)
+            {
+                context.Push(obj.GetMember(member));
+            }
+            else
+            {
+                context.Push(Value.Undefined());
+            }
         }
     }
 
@@ -35,16 +42,21 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         public override void Execute(ActionContext context)
         {
             //pop the value
-            var valueVal = context.Stack.Pop().ResolveRegister(context);
+            var valueVal = context.Pop();
             //pop the member name
-            var memberVal = context.Stack.Pop().ResolveRegister(context);
+            var memberName = context.Pop().ToString();
             //pop the object
-            var objectVal = context.Stack.Pop().ResolveRegister(context);
+            var p = context.Pop();
+            var obj = p.ToObject();
 
-            //make sure that potential register values are resolved:
-            var obj = objectVal.ToObject();
-
-            obj.Variables[memberVal.ToString()] = valueVal;
+            if (obj.IsBuiltInVariable(memberName))
+            {
+                obj.SetBuiltInVariable(memberName, valueVal);
+            }
+            else
+            {
+                obj.Variables[memberName] = valueVal;
+            }
         }
     }
 
@@ -61,12 +73,27 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
             var str = Parameters[0].ToString();
 
             //check if this a special object, like _root, _parent etc.
-            Value result = context.GetObject(str);
+            var result = context.GetObject(str);
 
             if (result == null)
                 throw new InvalidOperationException();
 
-            context.Stack.Push(result);
+            context.Push(result);
+        }
+    }
+
+    /// <summary>
+    /// Set a string variable in the current scope
+    /// </summary>
+    public sealed class SetStringVar : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.EA_SetStringVar;
+        public override uint Size => 4;
+
+        public override void Execute(ActionContext context)
+        {
+            var name = context.Pop().ToString();
+            context.Scope.Variables[name] = Parameters[0];
         }
     }
 
@@ -80,9 +107,14 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         public override void Execute(ActionContext context)
         {
             //pop the value
-            var variableName = context.Stack.Pop();
-            var variable = context.Scope.Variables[variableName.ToString()];
-            context.Stack.Push(variable);
+            var variableName = context.Pop();
+            Value variable = Value.Undefined();
+            if (context.Scope.Variables.ContainsKey(variableName.ToString()))
+            {
+                variable = context.Scope.Variables[variableName.ToString()];
+            }
+
+            context.Push(variable);
         }
     }
 
@@ -96,11 +128,18 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         public override void Execute(ActionContext context)
         {
             //pop the value
-            var valueVal = context.Stack.Pop();
+            var valueVal = context.Pop();
             //pop the member name
-            var memberVal = context.Stack.Pop();
+            var memberName = context.Pop().ToString();
 
-            context.Scope.Variables[memberVal.ToString()] = valueVal;
+            if (context.CheckLocal(memberName))
+            {
+                context.Locals[memberName] = valueVal;
+            }
+            else
+            {
+                context.Scope.Variables[memberName] = valueVal;
+            }
         }
     }
 
@@ -109,11 +148,14 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
     /// </summary>
     public sealed class GetMember : InstructionBase
     {
-        public override InstructionType Type => InstructionType.SetMember;
+        public override InstructionType Type => InstructionType.GetMember;
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            var member = context.Pop();
+            var obj = context.Pop().ToObject();
+
+            context.Push(obj.GetMember(member.ToString()));
         }
     }
 
@@ -126,11 +168,11 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var property = context.Stack.Pop().ToEnum<PropertyType>();
-            var target = context.GetTarget(context.Stack.Pop().ToString());
+            var property = context.Pop().ToEnum<PropertyType>();
+            var target = context.GetTarget(context.Pop().ToString());
 
             var prop = target.ToObject().GetProperty(property);
-            context.Stack.Push(prop);
+            context.Push(prop);
         }
     }
 
@@ -143,9 +185,9 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var value = context.Stack.Pop();
-            var property = context.Stack.Pop().ToEnum<PropertyType>();
-            var target = context.GetTarget(context.Stack.Pop().ToString());
+            var value = context.Pop();
+            var property = context.Pop().ToEnum<PropertyType>();
+            var target = context.GetTarget(context.Pop().ToString());
 
             target.ToObject().SetProperty(property, value);
         }
@@ -165,11 +207,11 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
             var memberVal = Parameters[0];
 
             //pop the object
-            var objectVal = context.Stack.Pop();
+            var objectVal = context.Pop();
 
             var valueVal = objectVal.ToObject().GetMember(memberVal.ToString());
 
-            context.Stack.Push(valueVal);
+            context.Push(valueVal);
         }
     }
 
@@ -180,7 +222,10 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            var memberVal = context.Pop().ToString();
+            var objectVal = context.Pop().ToObject();
+
+            objectVal.Variables[memberVal] = Parameters[0];
         }
     }
 
@@ -193,18 +238,18 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var name = context.Stack.Pop().ToString();
-            var nArgs = context.Stack.Pop().ToInteger();
+            var name = context.Pop().ToString();
+            var nArgs = context.Pop().ToInteger();
 
             Value[] args = new Value[nArgs];
 
             for (int i = 0; i < nArgs; ++i)
             {
-                args[i] = context.Stack.Pop();
+                args[i] = context.Pop();
             }
 
-            var obj = context.ConstructObject(name,args);
-            context.Stack.Push(obj);
+            var obj = context.ConstructObject(name, args);
+            context.Push(obj);
         }
     }
 
@@ -230,7 +275,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var val = context.Stack.Pop();
+            var val = context.Pop();
             Value result = null;
 
             switch (val.Type)
@@ -247,7 +292,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
                     result = Value.FromString("number");
                     break;
                 case ValueType.Object:
-                    if(val.ToObject().Item.Character is Movie)
+                    if (val.ToObject().Item.Character is Movie)
                         result = Value.FromString("movieclip");
                     else
                         result = Value.FromString("object");
@@ -262,7 +307,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
                     throw new InvalidOperationException();
             }
 
-            context.Stack.Push(result);
+            context.Push(result);
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Runtime.CompilerServices;
 using OpenSage.Data.Map;
+using OpenSage.Scripting;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -26,7 +27,7 @@ namespace OpenSage.Tests.Data.Map
                 {
                     // Differences in passability data, because the original files have unusual
                     // values for partial passability bytes beyond the map width.
-                    case @"Maps\USA07-TaskForces\USA07-TaskForces.map":
+                    case @"maps\usa07-taskforces\usa07-taskforces.map":
                     case @"maps\map evil shelobslair\map evil shelobslair.map": // BFME
                     case @"maps\map good shelobslair\map good shelobslair.map": // BFME
                     case @"data\maps\official\map_sp_aliens_1_1_london\map_sp_aliens_1_1_london.map": // CNC3
@@ -215,14 +216,14 @@ namespace OpenSage.Tests.Data.Map
 
                     if (y == 2 && (x == 1 || x == 2 || x == 3 || x == 4))
                     {
-                        Assert.NotEqual(0, mapFile.BlendTileData.ThreeWayBlends[x, y]);
+                        Assert.NotEqual(0u, mapFile.BlendTileData.ThreeWayBlends[x, y]);
                     }
                     else
                     {
-                        Assert.Equal(0, mapFile.BlendTileData.ThreeWayBlends[x, y]);
+                        Assert.Equal(0u, mapFile.BlendTileData.ThreeWayBlends[x, y]);
                     }
 
-                    Assert.Equal(0, mapFile.BlendTileData.CliffTextures[x, y]);
+                    Assert.Equal(0u, mapFile.BlendTileData.CliffTextures[x, y]);
                 }
             }
 
@@ -641,6 +642,14 @@ namespace OpenSage.Tests.Data.Map
             var cameraAnimation3 = mapFile.CameraAnimationList.Animations[3];
 
             Assert.Equal("Look-at Animation 2", cameraAnimation3.Name);
+        }
+
+        [Fact]
+        public void CameraFocalLength()
+        {
+            var mapFile = GetMapFile();
+
+            Assert.Equal(2, mapFile.NamedCameras.Cameras.Length);
         }
 
         [Fact]

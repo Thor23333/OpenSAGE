@@ -1,12 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <TargetFramework>net5.0</TargetFramework>
+    <Platforms>AnyCPU</Platforms>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\OpenSage.Game\OpenSage.Game.csproj" />
   </ItemGroup>
-
 </Project>

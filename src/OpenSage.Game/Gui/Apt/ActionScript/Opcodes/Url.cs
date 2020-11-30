@@ -1,7 +1,4 @@
-﻿using System;
-using System.Diagnostics;
-
-namespace OpenSage.Gui.Apt.ActionScript.Opcodes
+﻿namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 {
     /// <summary>
     /// Used to get variables from the engine (?)
@@ -13,10 +10,10 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var target = Parameters[0].ToString();
-            var url = Parameters[1].ToString();
+            var url = Parameters[0].ToString();
+            var target = Parameters[1].ToString();
 
-            Debug.WriteLine("[URL] Target: " + target + " URL: " + url);
+            context.Apt.Avm.Handle(context, url, target);
         }
     }
 
@@ -29,13 +26,10 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var target = context.Stack.Pop();
-            var url = context.Stack.Pop().ToString();
+            var target = context.Pop();
+            var url = context.Pop().ToString();
 
-            if(target.Type==ValueType.String)
-                Debug.WriteLine("[URL2] Target: " + target + " URL: " + url);
-            else
-                Debug.WriteLine("[URL2] URL: " + url);
+            context.Apt.Avm.Handle(context, url, target.ToString());
         }
     }
 }

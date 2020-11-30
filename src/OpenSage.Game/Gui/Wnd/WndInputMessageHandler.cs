@@ -3,7 +3,6 @@ using System.Linq;
 using OpenSage.Gui.Wnd.Controls;
 using OpenSage.Input;
 using OpenSage.Mathematics;
-using Veldrid;
 
 namespace OpenSage.Gui.Wnd
 {
@@ -108,16 +107,57 @@ namespace OpenSage.Gui.Wnd
                         break;
                     }
 
-                // For the time being, just consume right and middle click events so that they don't go through controls:
-                case InputMessageType.MouseRightButtonUp:
                 case InputMessageType.MouseRightButtonDown:
+                    {
+                        if (GetControlAtPoint(message.Value.MousePosition, out var element, out var mousePosition))
+                        {
+                            element.InputCallback.Invoke(
+                                element,
+                                new WndWindowMessage(WndWindowMessageType.MouseRightDown, element, mousePosition),
+                                context);
+                            return InputMessageResult.Handled;
+                        }
+                        break;
+                    }
+
+                case InputMessageType.MouseRightButtonUp:
+                    {
+                        if (GetControlAtPoint(message.Value.MousePosition, out var element, out var mousePosition))
+                        {
+                            element.InputCallback.Invoke(
+                                element,
+                                new WndWindowMessage(WndWindowMessageType.MouseRightUp, element, mousePosition),
+                                context);
+                            return InputMessageResult.Handled;
+                        }
+                        break;
+                    }
+
+                // For the time being, just consume middle click events so that they don't go through controls:
                 case InputMessageType.MouseMiddleButtonDown:
                 case InputMessageType.MouseMiddleButtonUp:
-                {
-                    return GetControlAtPoint(message.Value.MousePosition, out var _, out var _)
-                        ? InputMessageResult.Handled
-                        : InputMessageResult.NotHandled;
-                }
+                    {
+                        return GetControlAtPoint(message.Value.MousePosition, out var _, out var _)
+                            ? InputMessageResult.Handled
+                            : InputMessageResult.NotHandled;
+                    }
+
+                case InputMessageType.KeyDown:
+                    {
+                        var control = _windowManager.FocussedControl;
+                        if(control != null)
+                        {
+                            control?.InputCallback.Invoke(
+                                control,
+                                new WndWindowMessage(WndWindowMessageType.KeyDown, control, null, message.Value.Key, message.Value.Modifiers),
+                                context
+                            );
+                            return InputMessageResult.Handled;
+                        }
+
+
+                        break;
+                    }
             }
 
             return InputMessageResult.NotHandled;

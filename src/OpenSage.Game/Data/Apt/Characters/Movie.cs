@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.IO;
-using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Apt.Characters
 {

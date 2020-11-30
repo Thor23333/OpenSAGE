@@ -1,10 +1,13 @@
 ﻿using System.Collections.Generic;
+using OpenSage.Content;
 using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
+using OpenSage.Graphics;
+using OpenSage.Graphics.ParticleSystems;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
-    public class ModelConditionState
+    public class ModelConditionState : IConditionState
     {
         internal static ModelConditionState ParseDefault(IniParser parser)
         {
@@ -15,11 +18,11 @@ namespace OpenSage.Logic.Object
             return result;
         }
 
-        internal static ModelConditionState Parse(IniParser parser)
+        internal static ModelConditionState Parse(IniParser parser, ModelConditionState defaultConditionState)
         {
             var conditionFlags = parser.ParseEnumBitArray<ModelConditionFlag>();
 
-            var result = parser.ParseBlock(FieldParseTable);
+            var result = parser.ParseBlock(FieldParseTable, defaultConditionState?.Clone() ?? new ModelConditionState());
 
             result.ConditionFlags = conditionFlags;
 
@@ -28,17 +31,17 @@ namespace OpenSage.Logic.Object
 
         internal static readonly IniParseTable<ModelConditionState> FieldParseTable = new IniParseTable<ModelConditionState>
         {
-            { "Model", (parser, x) => x.Model = parser.ParseFileName() },
+            { "Model", (parser, x) => x.Model = parser.ParseModelReference() },
+            { "Skeleton", (parser, x) => x.Skeleton = parser.ParseFileName() },
 
             { "WeaponRecoilBone", (parser, x) => x.WeaponRecoilBones.Add(BoneAttachPoint.Parse(parser)) },
             { "WeaponFireFXBone", (parser, x) => x.WeaponFireFXBones.Add(BoneAttachPoint.Parse(parser)) },
             { "WeaponMuzzleFlash", (parser, x) => x.WeaponMuzzleFlashes.Add(BoneAttachPoint.Parse(parser)) },
             { "WeaponLaunchBone", (parser, x) => x.WeaponLaunchBones.Add(BoneAttachPoint.Parse(parser)) },
             { "WeaponHideShowBone", (parser, x) => x.WeaponHideShowBones.Add(BoneAttachPoint.Parse(parser)) },
-
-            { "Animation", (parser, x) => x.Animations.Add(ObjectConditionAnimation.Parse(parser)) },
+            { "Animation", (parser, x) => x.ParseAnimation(parser) },
             { "AnimationMode", (parser, x) => x.AnimationMode = parser.ParseEnum<AnimationMode>() },
-            { "AnimationSpeedFactorRange", (parser, x) => x.AnimationSpeedFactorRange = FloatRange.Parse(parser) },
+            { "AnimationSpeedFactorRange", (parser, x) => x.AnimationSpeedFactorRange = parser.ParseFloatRange() },
             { "IdleAnimation", (parser, x) => x.IdleAnimations.Add(ObjectConditionAnimation.Parse(parser)) },
             { "Flags", (parser, x) => x.Flags = parser.ParseEnumFlags<AnimationFlags>() },
 
@@ -54,11 +57,67 @@ namespace OpenSage.Logic.Object
 
             { "TransitionKey", (parser, x) => x.TransitionKey = parser.ParseIdentifier() },
             { "WaitForStateToFinishIfPossible", (parser, x) => x.WaitForStateToFinishIfPossible = parser.ParseIdentifier() },
+
+            { "OverrideTooltip", (parser, x) => x.OverrideTooltip = parser.ParseAssetReference() },
+            { "FXEvent", (parser, x) => x.FXEvents.Add(FXEvent.Parse(parser)) },
+
+            { "Shadow", (parser, x) => x.Shadow = parser.ParseEnum<ObjectShadowType>() },
+            { "ShadowSizeX", (parser, x) => x.ShadowSizeX = parser.ParseInteger() },
+            { "ShadowSizeY", (parser, x) => x.ShadowSizeY = parser.ParseInteger() },
+            { "ShadowTexture", (parser, x) => x.ShadowTexture = parser.ParseAssetReference() },
+            { "ShadowMaxHeight", (parser, x) => x.ShadowMaxHeight = parser.ParseInteger() },
+            { "ShadowOpacityStart", (parser, x) => x.ShadowOpacityStart = parser.ParseInteger() },
+            { "ShadowOpacityFadeInTime", (parser, x) => x.ShadowOpacityFadeInTime = parser.ParseInteger() },
+            { "ShadowOpacityPeak", (parser, x) => x.ShadowOpacityPeak = parser.ParseInteger() },
+            { "ShadowOpacityFadeOutTime", (parser, x) => x.ShadowOpacityFadeOutTime = parser.ParseInteger() },
+            { "ShadowOpacityEnd", (parser, x) => x.ShadowOpacityEnd = parser.ParseInteger() },
+            { "ShadowOverrideLODVisibility", (parser, x) => x.ShadowOverrideLODVisibility = parser.ParseBoolean() },
+            { "StateName", (parser, x) => x.StateName = parser.ParseString() },
+            { "RetainSubObjects", (parser, x) => x.RetainSubObjects = parser.ParseBoolean() },
+            { "Texture", (parser, x) => x.Textures = parser.ParseAssetReferenceArray() },
+            { "ModelAnimationPrefix", (parser, x) => x.ModelAnimationPrefix = parser.ParseString() },
+            { "PortraitImageName", (parser, x) => x.PortraitImageName = parser.ParseString() },
+            { "ButtonImageName", (parser, x) => x.ButtonImageName = parser.ParseString() },
         };
+
+        private void ParseAnimation(IniParser parser)
+        {
+            if (parser.SageGame == SageGame.CncGenerals || parser.SageGame == SageGame.CncGeneralsZeroHour)
+            {
+                ConditionAnimations.Add(ObjectConditionAnimation.Parse(parser));
+            }
+            else
+            {
+                Animations.Add(AnimationStateAnimation.Parse(parser));
+            }
+        }
+
+        internal ModelConditionState Clone()
+        {
+            var result = (ModelConditionState) MemberwiseClone();
+
+            result.ConditionFlags = new BitArray<ModelConditionFlag>(result.ConditionFlags);
+            result.WeaponRecoilBones = new List<BoneAttachPoint>(result.WeaponRecoilBones);
+            result.WeaponFireFXBones = new List<BoneAttachPoint>(result.WeaponFireFXBones);
+            result.WeaponMuzzleFlashes = new List<BoneAttachPoint>(result.WeaponMuzzleFlashes);
+            result.WeaponLaunchBones = new List<BoneAttachPoint>(result.WeaponLaunchBones);
+            result.WeaponHideShowBones = new List<BoneAttachPoint>(result.WeaponHideShowBones);
+
+            result.ConditionAnimations = new List<ObjectConditionAnimation>(result.ConditionAnimations);
+            result.Animations = new List<AnimationStateAnimation>(result.Animations);
+
+            result.IdleAnimations = new List<ObjectConditionAnimation>(result.IdleAnimations);
+            result.ParticleSysBones = new List<ParticleSysBone>(result.ParticleSysBones);
+            result.FXEvents = new List<FXEvent>(result.FXEvents);
+            return result;
+        }
 
         public BitArray<ModelConditionFlag> ConditionFlags { get; private set; }
 
-        public string Model { get; private set; }
+        public LazyAssetReference<Model> Model { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public string Skeleton { get; private set; }
 
         // Weapon bone settings
         public List<BoneAttachPoint> WeaponRecoilBones { get; private set; } = new List<BoneAttachPoint>();
@@ -68,9 +127,10 @@ namespace OpenSage.Logic.Object
         public List<BoneAttachPoint> WeaponHideShowBones { get; private set; } = new List<BoneAttachPoint>();
 
         // Model animation settings
-        public List<ObjectConditionAnimation> Animations { get; private set; } = new List<ObjectConditionAnimation>();
+        public List<ObjectConditionAnimation> ConditionAnimations { get; private set; } = new List<ObjectConditionAnimation>();
+        public List<AnimationStateAnimation> Animations { get; private set; } = new List<AnimationStateAnimation>();
         public AnimationMode AnimationMode { get; private set; }
-        public FloatRange AnimationSpeedFactorRange { get; private set; }
+        public FloatRange AnimationSpeedFactorRange { get; private set; } = new FloatRange(1.0f, 1.0f);
         public List<ObjectConditionAnimation> IdleAnimations { get; private set; } = new List<ObjectConditionAnimation>();
         public AnimationFlags Flags { get; private set; }
 
@@ -89,6 +149,64 @@ namespace OpenSage.Logic.Object
         public string TransitionKey { get; private set; }
         public string WaitForStateToFinishIfPossible { get; private set; }
 
+        [AddedIn(SageGame.Bfme)]
+        public string OverrideTooltip { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public List<FXEvent> FXEvents { get; private set; } = new List<FXEvent>();
+
+        [AddedIn(SageGame.Bfme)]
+        public ObjectShadowType Shadow { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowSizeX { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowSizeY { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public string ShadowTexture { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowMaxHeight { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowOpacityStart { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowOpacityFadeInTime { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowOpacityPeak { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowOpacityFadeOutTime	{ get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int ShadowOpacityEnd { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public bool ShadowOverrideLODVisibility { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public string StateName { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public bool RetainSubObjects { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string[] Textures { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string ModelAnimationPrefix { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string PortraitImageName { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string ButtonImageName { get; private set; }
+
+
         /// <summary>
         /// Used by AliasConditionState.
         /// </summary>
@@ -106,7 +224,7 @@ namespace OpenSage.Logic.Object
                 WeaponLaunchBones = WeaponLaunchBones,
                 WeaponHideShowBones = WeaponHideShowBones,
 
-                Animations = Animations,
+                ConditionAnimations = ConditionAnimations,
                 AnimationMode = AnimationMode,
                 AnimationSpeedFactorRange = AnimationSpeedFactorRange,
                 IdleAnimations = IdleAnimations,
@@ -133,8 +251,9 @@ namespace OpenSage.Logic.Object
         {
             var result = new ObjectConditionAnimation
             {
-                Animation = parser.ParseAnimationName()
+                Animation = parser.ParseAnimationReference()
             };
+
 
             var unknown1Token = parser.GetNextTokenOptional();
 
@@ -152,7 +271,7 @@ namespace OpenSage.Logic.Object
             return result;
         }
 
-        public string Animation { get; private set; }
+        public LazyAssetReference<Graphics.Animation.W3DAnimation> Animation { get; private set; }
         public float Unknown1 { get; private set; }
         public int Unknown2 { get; private set; }
     }
@@ -179,11 +298,11 @@ namespace OpenSage.Logic.Object
             return new ParticleSysBone
             {
                 BoneName = parser.ParseBoneName(),
-                ParticleSystem = parser.ParseAssetReference()
+                ParticleSystem = parser.ParseFXParticleSystemTemplateReference()
             };
         }
 
         public string BoneName { get; private set; }
-        public string ParticleSystem { get; private set; }
+        public LazyAssetReference<FXParticleSystemTemplate> ParticleSystem { get; private set; }
     }
 }

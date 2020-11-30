@@ -4,33 +4,19 @@ using System.Linq;
 
 namespace OpenSage.Input
 {
-    public sealed class InputMessageBuffer : DisposableBase
+    public sealed class InputMessageBuffer
     {
-        private readonly Queue<InputMessage> _messageQueue;
-
         public List<InputMessageHandler> Handlers { get; }
 
-        internal InputMessageBuffer(GamePanel panel)
+        internal InputMessageBuffer()
         {
-            _messageQueue = new Queue<InputMessage>();
-
             Handlers = new List<InputMessageHandler>();
-
-            panel.InputMessageReceived += OnInputMessage;
-
-            AddDisposeAction(() => panel.InputMessageReceived -= OnInputMessage);
         }
 
-        private void OnInputMessage(object sender, InputMessageEventArgs e)
+        internal void PumpEvents(IEnumerable<InputMessage> inputMessages)
         {
-            _messageQueue.Enqueue(e.Message);
-        }
-
-        internal void PumpEvents()
-        {
-            while (_messageQueue.Count > 0)
+            foreach (var message in inputMessages)
             {
-                var message = _messageQueue.Dequeue();
                 foreach (var handler in PriorityOrderedHandlers())
                 {
                     if (handler.HandleMessage(message) == InputMessageResult.Handled)
@@ -49,6 +35,11 @@ namespace OpenSage.Input
             {
                 foreach (var handler in Handlers)
                 {
+                    if (handler.Priority == HandlingPriority.Disabled)
+                    {
+                        continue;
+                    }
+
                     if (handler.Priority == (HandlingPriority) requiredPriority)
                     {
                         yield return handler;

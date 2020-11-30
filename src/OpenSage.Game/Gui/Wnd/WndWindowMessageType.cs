@@ -10,6 +10,12 @@
         MouseDown,
         MouseUp,
 
-        SelectedButton
+        MouseRightDown,
+        MouseRightUp,
+
+        SelectedButton,
+
+        KeyDown,
+        KeyUp
     }
 }

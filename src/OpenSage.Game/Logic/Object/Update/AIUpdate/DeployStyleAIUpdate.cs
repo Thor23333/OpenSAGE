@@ -1,5 +1,4 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
 
 namespace OpenSage.Logic.Object
 {
@@ -9,16 +8,18 @@ namespace OpenSage.Logic.Object
     /// </summary>
     public sealed class DeployStyleAIUpdateModuleData : AIUpdateModuleData
     {
-        internal static new DeployStyleAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        internal new static DeployStyleAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
 
-        private static new readonly IniParseTable<DeployStyleAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
+        private new static readonly IniParseTable<DeployStyleAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
             .Concat(new IniParseTable<DeployStyleAIUpdateModuleData>
             {
                 { "PackTime", (parser, x) => x.PackTime = parser.ParseInteger() },
                 { "UnpackTime", (parser, x) => x.UnpackTime = parser.ParseInteger() },
                 { "TurretsFunctionOnlyWhenDeployed", (parser, x) => x.TurretsFunctionOnlyWhenDeployed = parser.ParseBoolean() },
                 { "TurretsMustCenterBeforePacking", (parser, x) => x.TurretsMustCenterBeforePacking = parser.ParseBoolean() },
-                { "ManualDeployAnimations", (parser, x) => x.ManualDeployAnimations = parser.ParseBoolean() }
+                { "ManualDeployAnimations", (parser, x) => x.ManualDeployAnimations = parser.ParseBoolean() },
+                { "MustDeployToAttack", (parser, x) => x.MustDeployToAttack = parser.ParseBoolean() },
+                { "DeployedAttributeModifier", (parser, x) => x.DeployedAttributeModifier = parser.ParseAssetReference() }
             });
 
         public int PackTime { get; private set; }
@@ -28,5 +29,11 @@ namespace OpenSage.Logic.Object
 
         [AddedIn(SageGame.CncGeneralsZeroHour)]
         public bool ManualDeployAnimations { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public bool MustDeployToAttack { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string DeployedAttributeModifier { get; private set; }
     }
 }

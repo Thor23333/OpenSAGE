@@ -1,19 +1,35 @@
-﻿using OpenSage.Data.Ini.Parser;
+﻿using System.IO;
+using OpenSage.Data.Ini;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Logic.Object
 {
+    public sealed class SpecialAbilityModule : SpecialPowerModule
+    {
+        // TODO
+
+        internal override void Load(BinaryReader reader)
+        {
+            var version = reader.ReadVersion();
+            if (version != 1)
+            {
+                throw new InvalidDataException();
+            }
+
+            base.Load(reader);
+        }
+    }
+
     public sealed class SpecialAbilityModuleData : SpecialPowerModuleData
     {
-        internal static SpecialAbilityModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        internal static new SpecialAbilityModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
 
         private static new readonly IniParseTable<SpecialAbilityModuleData> FieldParseTable = SpecialPowerModuleData.FieldParseTable
-            .Concat(new IniParseTable<SpecialAbilityModuleData>
-            {
-                { "UpdateModuleStartsAttack", (parser, x) => x.UpdateModuleStartsAttack = parser.ParseBoolean() },
-                { "InitiateSound", (parser, x) => x.InitiateSound = parser.ParseAssetReference() },
-            });
+            .Concat(new IniParseTable<SpecialAbilityModuleData>());
 
-        public bool UpdateModuleStartsAttack { get; private set; }
-        public string InitiateSound { get; private set; }
+        internal override BehaviorModule CreateModule(GameObject gameObject, GameContext context)
+        {
+            return new SpecialAbilityModule();
+        }
     }
 }

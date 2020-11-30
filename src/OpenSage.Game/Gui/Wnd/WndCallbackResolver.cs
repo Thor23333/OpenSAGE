@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using OpenSage.Gui.Wnd.Controls;
 
@@ -17,11 +18,14 @@ namespace OpenSage.Gui.Wnd
             // At the moment callbacks from all mods are lumped together.
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
+                if (!assembly.FullName.StartsWith("OpenSage"))
+                    continue;
+
                 foreach (var type in assembly.GetTypes())
                 {
                     if (type.GetCustomAttributes(typeof(WndCallbacksAttribute), false).Length > 0)
                     {
-                        foreach (var method in type.GetMethods(BindingFlags.Static | BindingFlags.Public))
+                        foreach (var method in type.GetMethods(BindingFlags.Static | BindingFlags.Public).Where(m => !m.IsSpecialName))
                         {
                             _callbackCache.Add(method.Name, method);
                         }
@@ -45,6 +49,8 @@ namespace OpenSage.Gui.Wnd
             return GetCallback<ControlDrawCallback>(name);
         }
 
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         private TDelegate GetCallback<TDelegate>(string name)
             where TDelegate : class
         {
@@ -55,7 +61,7 @@ namespace OpenSage.Gui.Wnd
 
             if (!_callbackCache.TryGetValue(name, out var method))
             {
-                // TODO: Shouldn't happen, but will during development. We should log a warning.
+                logger.Warn($"Failed to resolve callback '{name}'");
                 return null;
             }
 

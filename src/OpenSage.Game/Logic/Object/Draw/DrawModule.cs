@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
-using OpenSage.Content;
 using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
+using OpenSage.Graphics;
 using OpenSage.Graphics.Cameras;
-using OpenSage.Graphics.ParticleSystems;
 using OpenSage.Graphics.Rendering;
+using OpenSage.Graphics.Shaders;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
@@ -14,21 +14,28 @@ namespace OpenSage.Logic.Object
     {
         public abstract IEnumerable<BitArray<ModelConditionFlag>> ModelConditionStates { get; }
 
-        internal virtual IEnumerable<AttachedParticleSystem> GetAllAttachedParticleSystems()
+        // TODO: Probably shouldn't have this here.
+        internal abstract string GetWeaponFireFXBone(WeaponSlot slot);
+        internal abstract string GetWeaponLaunchBone(WeaponSlot slot);
+
+        public virtual void UpdateConditionState(BitArray<ModelConditionFlag> flags, Random random)
         {
-            yield break;
+
         }
 
-        public virtual void UpdateConditionState(BitArray<ModelConditionFlag> flags)
-        {
-
-        }
-
-        internal abstract void Update(GameTime gameTime);
+        internal abstract void Update(in TimeInterval time);
 
         internal abstract void SetWorldMatrix(in Matrix4x4 worldMatrix);
 
-        internal abstract void BuildRenderList(RenderList renderList, CameraComponent camera);
+        internal abstract void BuildRenderList(RenderList renderList,
+            Camera camera,
+            bool castsShadow,
+            MeshShaderResources.RenderItemConstantsPS renderItemConstantsPS,
+            List<string> hiddenSubObjects = null);
+
+        internal abstract (ModelInstance, ModelBone) FindBone(string boneName);
+
+        internal virtual void DrawInspector() { }
     }
 
     public abstract class DrawModuleData : ModuleData
@@ -37,27 +44,36 @@ namespace OpenSage.Logic.Object
 
         internal static readonly Dictionary<string, Func<IniParser, DrawModuleData>> DrawModuleParseTable = new Dictionary<string, Func<IniParser, DrawModuleData>>
         {
+            { "W3DBuffDraw", W3dBuffDrawModuleData.Parse },
             { "W3DDebrisDraw", W3dDebrisDrawModuleData.Parse },
             { "W3DDefaultDraw", W3dDefaultDrawModuleData.Parse },
             { "W3DDependencyModelDraw", W3dDependencyModelDrawModuleData.Parse },
+            { "W3DFloorDraw", W3dFloorDrawModuleData.Parse },
+            { "W3DHordeModelDraw", W3dHordeModelDrawModuleData.Parse },
             { "W3DLaserDraw", W3dLaserDrawModuleData.Parse },
+            { "W3DLightDraw", W3dLightDrawModuleData.Parse },
             { "W3DModelDraw", W3dModelDrawModuleData.ParseModel },
             { "W3DOverlordAircraftDraw", W3dOverlordAircraftDraw.Parse },
             { "W3DOverlordTankDraw", W3dOverlordTankDrawModuleData.Parse },
             { "W3DOverlordTruckDraw", W3dOverlordTruckDrawModuleData.Parse },
             { "W3DPoliceCarDraw", W3dPoliceCarDrawModuleData.Parse },
             { "W3DProjectileStreamDraw", W3dProjectileStreamDrawModuleData.Parse },
+            { "W3DPropDraw", W3dPropDrawModuleData.Parse },
+            { "W3DQuadrupedDraw", W3dQuadrupedDrawModuleData.Parse },
             { "W3DRopeDraw", W3dRopeDrawModuleData.Parse },
+            { "W3DSailModelDraw", W3dSailModelDrawModuleData.Parse },
             { "W3DScienceModelDraw", W3dScienceModelDrawModuleData.Parse },
             { "W3DScriptedModelDraw", W3dScriptedModelDrawModuleData.Parse },
+            { "W3DStreakDraw", W3dStreakDrawModuleData.Parse },
             { "W3DSupplyDraw", W3dSupplyDrawModuleData.Parse },
             { "W3DTankDraw", W3dTankDrawModuleData.Parse },
             { "W3DTankTruckDraw", W3dTankTruckDrawModuleData.Parse },
+            { "W3DTornadoDraw", W3dTornadoDrawModuleData.Parse },
             { "W3DTracerDraw", W3dTracerDrawModuleData.Parse },
             { "W3DTreeDraw", W3dTreeDrawModuleData.Parse },
             { "W3DTruckDraw", W3dTruckDrawModuleData.Parse },
         };
 
-        internal virtual DrawModule CreateDrawModule(ContentManager contentManager) => null; // TODO: Make this abstract.
+        internal virtual DrawModule CreateDrawModule(GameObject gameObject, GameContext context) => null; // TODO: Make this abstract.
     }
 }

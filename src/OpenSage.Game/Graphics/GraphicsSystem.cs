@@ -1,5 +1,5 @@
-﻿using System;
-using OpenSage.Graphics.Rendering;
+﻿using OpenSage.Graphics.Rendering;
+using Veldrid;
 
 namespace OpenSage.Graphics
 {
@@ -7,7 +7,11 @@ namespace OpenSage.Graphics
     {
         private readonly RenderContext _renderContext;
 
-        private RenderPipeline _renderPipeline;
+        internal RenderPipeline RenderPipeline { get; private set; }
+
+        public Texture ShadowMap => RenderPipeline.ShadowMap;
+        public Texture ReflectionMap => RenderPipeline.ReflectionMap;
+        public Texture RefractionMap => RenderPipeline.RefractionMap;
 
         public GraphicsSystem(Game game)
             : base(game)
@@ -17,22 +21,19 @@ namespace OpenSage.Graphics
 
         public override void Initialize()
         {
-            _renderPipeline = AddDisposable(new RenderPipeline(Game));
+            RenderPipeline = AddDisposable(new RenderPipeline(Game));
         }
 
-        public override void Draw(GameTime gameTime)
+        internal void Draw(in TimeInterval gameTime)
         {
-            _renderContext.Game = Game;
+            _renderContext.ContentManager = Game.ContentManager;
             _renderContext.GraphicsDevice = Game.GraphicsDevice;
-            _renderContext.Graphics = this;
-            _renderContext.Camera = Game.Scene3D?.Camera;
-            _renderContext.Scene = Game.Scene3D;
+            _renderContext.Scene3D = Game.Scene3D;
+            _renderContext.Scene2D = Game.Scene2D;
             _renderContext.RenderTarget = Game.Panel.Framebuffer;
             _renderContext.GameTime = gameTime;
 
-            _renderPipeline.Execute(_renderContext);
-
-            base.Draw(gameTime);
+            RenderPipeline.Execute(_renderContext);
         }
     }
 }

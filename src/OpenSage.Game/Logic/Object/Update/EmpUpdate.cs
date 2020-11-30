@@ -1,5 +1,5 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
@@ -15,10 +15,10 @@ namespace OpenSage.Logic.Object
             { "StartScale", (parser, x) => x.StartScale = parser.ParseFloat() },
             { "TargetScaleMin", (parser, x) => x.TargetScaleMin = parser.ParseFloat() },
             { "TargetScaleMax", (parser, x) => x.TargetScaleMax = parser.ParseFloat() },
-            { "StartColor", (parser, x) => x.StartColor = IniColorRgb.Parse(parser) },
-            { "EndColor", (parser, x) => x.EndColor = IniColorRgb.Parse(parser) },
+            { "StartColor", (parser, x) => x.StartColor = parser.ParseColorRgb() },
+            { "EndColor", (parser, x) => x.EndColor = parser.ParseColorRgb() },
             { "DisableFXParticleSystem", (parser, x) => x.DisableFXParticleSystem = parser.ParseAssetReference() },
-            { "DoesNotAffect", (parser, x) => x.DoesNotAffect = parser.ParseEnum<WeaponAffectsTypes>() },
+            { "DoesNotAffect", (parser, x) => x.DoesNotAffect = ObjectFilter.Parse(parser) },
             { "DoesNotAffectMyOwnBuildings", (parser, x) => x.DoesNotAffectMyOwnBuildings = parser.ParseBoolean() },
             { "EffectRadius", (parser, x) => x.EffectRadius = parser.ParseInteger() },
         };
@@ -29,12 +29,12 @@ namespace OpenSage.Logic.Object
         public float StartScale { get; private set; }
         public float TargetScaleMin { get; private set; }
         public float TargetScaleMax { get; private set; }
-        public IniColorRgb StartColor { get; private set; }
-        public IniColorRgb EndColor { get; private set; }
+        public ColorRgb StartColor { get; private set; }
+        public ColorRgb EndColor { get; private set; }
         public string DisableFXParticleSystem { get; private set; }
 
         [AddedIn(SageGame.CncGeneralsZeroHour)]
-        public WeaponAffectsTypes DoesNotAffect { get; private set; }
+        public ObjectFilter DoesNotAffect { get; private set; }
 
         [AddedIn(SageGame.CncGeneralsZeroHour)]
         public bool DoesNotAffectMyOwnBuildings { get; private set; }

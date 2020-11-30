@@ -65,6 +65,54 @@ namespace OpenSage.Tests.Data.Rep
             WriteOrders(replayFile);
         }
 
+        [Fact]
+        public void Test_005_BuildSellPowerPlant()
+        {
+            var replayFile = LoadReplayFile();
+
+            Assert.Equal(ReplayGameType.Generals, replayFile.Header.GameType);
+            Assert.Equal(2395, replayFile.Header.NumTimecodes);
+            Assert.Equal(2565, replayFile.Chunks.Count);
+
+            WriteOrders(replayFile);
+        }
+
+        [Fact]
+        public void Test_006_TrainInfantryAttackGround()
+        {
+            var replayFile = LoadReplayFile();
+
+            Assert.Equal(ReplayGameType.Generals, replayFile.Header.GameType);
+            Assert.Equal(1839, replayFile.Header.NumTimecodes);
+            Assert.Equal(1998, replayFile.Chunks.Count);
+
+            WriteOrders(replayFile);
+        }
+
+        [Fact]
+        public void Test_007_PlayerUpgradeStartCancel()
+        {
+            var replayFile = LoadReplayFile();
+
+            Assert.Equal(ReplayGameType.Generals, replayFile.Header.GameType);
+            Assert.Equal(1256, replayFile.Header.NumTimecodes);
+            Assert.Equal(1376, replayFile.Chunks.Count);
+
+            WriteOrders(replayFile);
+        }
+
+        [Fact]
+        public void Test_008_TrainInfantryCancel()
+        {
+            var replayFile = LoadReplayFile();
+
+            Assert.Equal(ReplayGameType.Generals, replayFile.Header.GameType);
+            Assert.Equal(1095, replayFile.Header.NumTimecodes);
+            Assert.Equal(1170, replayFile.Chunks.Count);
+
+            WriteOrders(replayFile);
+        }
+
         private static ReplayFile LoadReplayFile([CallerMemberName] string testName = null)
         {
             using (var fileSystem = new FileSystem(Path.Combine(Environment.CurrentDirectory, "Data", "Rep", "Assets")))

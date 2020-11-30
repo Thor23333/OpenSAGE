@@ -44,9 +44,11 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
     {
         public override InstructionType Type => InstructionType.Trace;
 
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         public override void Execute(ActionContext context)
         {
-            Debug.WriteLine("[TRACE] " + context.Stack.Pop().ToString());
+            logger.Debug($"[TRACE] {context.Pop().ToString()}");
         }
     }
 
@@ -61,7 +63,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         public override void Execute(ActionContext context)
         {
             //get the value from the stack
-            var val = context.Stack.Peek();
+            var val = context.Peek();
 
             //store the value inside the specified register
             var reg = Parameters[0].ToInteger();
@@ -78,15 +80,15 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var nArgs = context.Stack.Pop().ToInteger();
+            var nArgs = context.Pop().ToInteger();
             Value[] args = new Value[nArgs];
 
-            for(int i = 0;i<nArgs;++i)
+            for (int i = 0; i < nArgs; ++i)
             {
-                args[i] = context.Stack.Pop();
+                args[i] = context.Pop();
             }
 
-            context.Stack.Push(Value.FromArray(args));
+            context.Push(Value.FromArray(args));
         }
     }
 
@@ -125,8 +127,8 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var value = context.Stack.Pop();
-            var varName = context.Stack.Pop().ToString();
+            var value = context.Pop();
+            var varName = context.Pop().ToString();
 
             context.Locals[varName] = value;
         }
@@ -154,7 +156,8 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            var val = context.Pop();
+            context.Push(Value.FromString(val.ToString()));
         }
     }
 
@@ -168,9 +171,44 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var obj = context.Stack.Pop();
+            var obj = context.Pop().ToObject();
+            context.Push(Value.FromObject(null));
+            // Not sure if this is correct
+            foreach (var slot in obj.Variables.Keys)
+            {
+                context.Push(Value.FromString(slot));
+            }
+        }
+    }
 
-            throw new NotImplementedException();
+    /// <summary>
+    /// Pops an object from stack and enumerates it's slots
+    /// </summary>
+    public sealed class Var : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.Var;
+
+        public override void Execute(ActionContext context)
+        {
+            // TODO: fix this
+            //throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// Pops an object from stack and enumerates it's slots
+    /// </summary>
+    public sealed class RandomNumber : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.Random;
+
+        public override void Execute(ActionContext context)
+        {
+            // TODO: fix this
+            var max = context.Pop().ToInteger();
+
+            var rnd = new Random();
+            context.Push(Value.FromInteger(rnd.Next(0, max)));
         }
     }
 }

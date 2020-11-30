@@ -1,5 +1,8 @@
-﻿using OpenSage.Gui.Wnd;
+﻿using System;
+using System.Linq;
+using OpenSage.Gui.Wnd;
 using OpenSage.Gui.Wnd.Controls;
+using OpenSage.Mathematics;
 using OpenSage.Network;
 
 namespace OpenSage.Mods.Generals.Gui
@@ -7,33 +10,40 @@ namespace OpenSage.Mods.Generals.Gui
     [WndCallbacks]
     public static class SkirmishGameOptionsMenuCallbacks
     {
+        public static GameOptionsUtil GameOptions { get; private set; }
+
+        private static Game _game;
+
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         public static void SkirmishGameOptionsMenuSystem(Control control, WndWindowMessage message, ControlCallbackContext context)
         {
-            switch (message.MessageType)
+            if (!GameOptions.HandleSystem(control, message, context))
             {
-                case WndWindowMessageType.SelectedButton:
-                    switch (message.Element.Name)
-                    {
-                        case "SkirmishGameOptionsMenu.wnd:ButtonSelectMap":
-                            context.WindowManager.PushWindow(@"Menus\SkirmishMapSelectMenu.wnd");
-                            break;
-
-                        case "SkirmishGameOptionsMenu.wnd:ButtonStart":
-                            context.Game.Scene2D.WndWindowManager.PopWindow();
-                            context.Game.StartGame(
-                                @"maps\Alpine Assault\Alpine Assault.map", // TODO
-                                new EchoConnection(),
-                                new[] { "America" }, // TODO: We need to receive the player list from UI.
-                                0); 
-                            break;
-
-                        case "SkirmishGameOptionsMenu.wnd:ButtonBack":
-                            context.WindowManager.SetWindow(@"Menus\MainMenu.wnd");
-                            // TODO: Go back to Single Player sub-menu
-                            break;
-                    }
-                    break;
+                switch (message.MessageType)
+                {
+                    case WndWindowMessageType.SelectedButton:
+                        switch (message.Element.Name)
+                        {
+                            case "SkirmishGameOptionsMenu.wnd:ButtonBack":
+                                context.WindowManager.SetWindow(@"Menus\MainMenu.wnd");
+                                _game.SkirmishManager.Quit();
+                                // TODO: Go back to Single Player sub-menu
+                                break;
+                        }
+                        break;
+                }
             }
+        }
+
+        public static void SkirmishGameOptionsMenuInit(Window window, Game game)
+        {
+
+
+
+            GameOptions = new GameOptionsUtil(window, game, "Skirmish");
+
+            _game = game;
         }
     }
 }

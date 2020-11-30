@@ -1,8 +1,40 @@
-﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
+﻿using System;
+using OpenSage.Data.Ini;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
+    internal sealed class AutoDepositUpdate : BehaviorModule
+    {
+        GameObject _gameObject;
+        AutoDepositUpdateModuleData _moduleData;
+
+        private TimeSpan _waitUntil;
+
+        internal AutoDepositUpdate(GameObject gameObject, GameContext context, AutoDepositUpdateModuleData moduleData)
+        {
+            _moduleData = moduleData;
+            _gameObject = gameObject;
+        }
+
+        internal override void Update(BehaviorUpdateContext context)
+        {
+            if (_gameObject.IsBeingConstructed()
+                 || (context.Time.TotalTime < _waitUntil))
+            {
+                return;
+            }
+
+            _waitUntil = context.Time.TotalTime + TimeSpan.FromMilliseconds(_moduleData.DepositTiming);
+            var amount = (uint) (_moduleData.DepositAmount * _gameObject.ProductionModifier);
+            _gameObject.Owner.ReceiveMoney(amount);
+            if (!_moduleData.GiveNoXP)
+            {
+                _gameObject.GainExperience((int)amount);
+            }
+        }
+    }
+
     public sealed class AutoDepositUpdateModuleData : UpdateModuleData
     {
         internal static AutoDepositUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
@@ -13,7 +45,12 @@ namespace OpenSage.Logic.Object
             { "DepositAmount", (parser, x) => x.DepositAmount = parser.ParseInteger() },
             { "InitialCaptureBonus", (parser, x) => x.InitialCaptureBonus = parser.ParseInteger() },
             { "ActualMoney", (parser, x) => x.ActualMoney = parser.ParseBoolean() },
-            { "UpgradedBoost", (parser, x) => x.UpgradedBoost = BoostUpgrade.Parse(parser) }
+            { "UpgradedBoost", (parser, x) => x.UpgradedBoost = BoostUpgrade.Parse(parser) },
+            { "Upgrade", (parser, x) => x.Upgrade = parser.ParseAssetReference() },
+            { "UpgradeBonusPercent", (parser, x) => x.UpgradeBonusPercent = parser.ParsePercentage() },
+            { "UpgradeMustBePresent", (parser, x) => x.UpgradeMustBePresent = ObjectFilter.Parse(parser) },
+            { "GiveNoXP", (parser, x) => x.GiveNoXP = parser.ParseBoolean() },
+            { "OnlyWhenGarrisoned", (parser, x) => x.OnlyWhenGarrisoned = parser.ParseBoolean() },
         };
 
         /// <summary>
@@ -36,5 +73,25 @@ namespace OpenSage.Logic.Object
 
         [AddedIn(SageGame.CncGeneralsZeroHour)]
         public BoostUpgrade UpgradedBoost { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public string Upgrade { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public Percentage UpgradeBonusPercent { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public ObjectFilter UpgradeMustBePresent { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public bool GiveNoXP { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public bool OnlyWhenGarrisoned { get; private set; }
+
+        internal override BehaviorModule CreateModule(GameObject gameObject, GameContext context)
+        {
+            return new AutoDepositUpdate(gameObject, context, this);
+        }
     }
 }

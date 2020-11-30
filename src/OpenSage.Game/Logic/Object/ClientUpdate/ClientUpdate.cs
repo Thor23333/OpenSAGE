@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using OpenSage.Data.Ini.Parser;
+using OpenSage.Data.Ini;
 
 namespace OpenSage.Logic.Object
 {
@@ -12,7 +12,9 @@ namespace OpenSage.Logic.Object
         {
             { "AnimatedParticleSysBoneClientUpdate", AnimatedParticleSysBoneClientUpdateModuleData.Parse },
             { "BeaconClientUpdate", BeaconClientUpdateModuleData.Parse },
+            { "EvaAnnounceClientCreate", EvaAnnounceClientCreateModuleData.Parse },
             { "LaserUpdate", LaserUpdateModuleData.Parse },
+            { "RadarMarkerClientUpdate", RadarMarkerClientUpdateModuleData.Parse },
             { "SwayClientUpdate", SwayClientUpdateModuleData.Parse },
         };
     }

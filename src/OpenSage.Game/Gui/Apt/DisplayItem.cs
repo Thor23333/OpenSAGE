@@ -1,11 +1,15 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Diagnostics;
+using System.Numerics;
 using OpenSage.Data.Apt.Characters;
+using OpenSage.Graphics;
 using OpenSage.Gui.Apt.ActionScript;
 using OpenSage.Mathematics;
+using Veldrid;
 
 namespace OpenSage.Gui.Apt
 {
-    public struct ItemTransform
+    public struct ItemTransform : ICloneable
     {
         public static readonly ItemTransform None = new ItemTransform(ColorRgbaF.White, Matrix3x2.Identity, Vector2.Zero);
 
@@ -20,36 +24,80 @@ namespace OpenSage.Gui.Apt
             GeometryTranslation = translation;
         }
 
-        public static ItemTransform operator *(ItemTransform a, ItemTransform b)
+        public static ItemTransform operator *(in ItemTransform a, in ItemTransform b)
         {
             return new ItemTransform(a.ColorTransform * b.ColorTransform,
                                      a.GeometryRotation * b.GeometryRotation,
                                      a.GeometryTranslation + b.GeometryTranslation);
         }
+
+        public void Scale(float x, float y)
+        {
+            GeometryRotation = Matrix3x2.Multiply(Matrix3x2.CreateScale(x, y), GeometryRotation);
+        }
+
+        public ItemTransform WithColorTransform(in ColorRgbaF color)
+        {
+            return new ItemTransform(color,
+                         GeometryRotation,
+                         GeometryTranslation);
+        }
+
+        public object Clone()
+        {
+            return MemberwiseClone();
+        }
     }
 
-    public interface IDisplayItem
+    [DebuggerDisplay("[DisplayItem:{Name}]")]
+    public abstract class DisplayItem
     {
-        AptContext Context { get; }
-        SpriteItem Parent { get; }
-        Character Character { get; }
-        ItemTransform Transform { get; set; }
-        ObjectContext ScriptObject { get; }
-        string Name { get; set; }
-        bool Visible { get; set; }
+        public AptContext Context { get; protected set; }
+        public SpriteItem Parent { get; protected set; }
+        public Character Character { get; protected set; }
+        public ItemTransform Transform { get; set; }
+        public ObjectContext ScriptObject { get; protected set; }
+        public string Name { get; set; }
+        public bool Visible { get; set; }
+        public int? ClipDepth { get; set; }
+
+        public bool Highlight { get; set; }
+
+        internal RenderTarget ClipMask { get; set; }
 
         /// <summary>
         /// Create a new DisplayItem
         /// </summary>
-        /// <param name="chararacter"></param>
+        /// <param name="character"></param>
         /// The template character that is used for this Item
         /// <param name="context"></param>
         /// Contains information about the AptFile where this is part of
         /// <param name="parent"></param>
-        /// The parent displayitem (which must be a SpriteItem)
-        void Create(Character chararacter, AptContext context, SpriteItem parent = null);
-        void Update(GameTime gt);
-        void Render(ItemTransform pTransform, DrawingContext2D dc);
-        void RunActions(GameTime gt);
+        /// The parent displayItem (which must be a SpriteItem)
+        public abstract void Create(Character character, AptContext context, SpriteItem parent = null);
+
+        public virtual void Update(TimeInterval gt) { }
+
+        public void Render(AptRenderingContext renderingContext)
+        {
+            if (ClipDepth.HasValue)
+            {
+                ClipMask.EnsureSize(renderingContext.WindowSize);
+                renderingContext.SetRenderTarget(ClipMask);
+            }
+
+            RenderImpl(renderingContext);
+
+            if (ClipDepth.HasValue)
+            {
+                renderingContext.SetRenderTarget(null);
+            }
+        }
+
+        protected virtual void RenderImpl(AptRenderingContext renderingContext) { }
+
+        public virtual void RunActions(TimeInterval gt) { }
+
+        public virtual bool HandleInput(Point2D mousePos, bool mouseDown) { return false; }
     }
 }

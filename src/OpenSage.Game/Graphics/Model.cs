@@ -1,32 +1,66 @@
-﻿using Veldrid;
+﻿﻿using System.IO;
+using OpenSage.Content.Loaders;
+using OpenSage.Data.StreamFS;
+using OpenSage.Data.W3x;
+using OpenSage.FileFormats;
+using System.Diagnostics;
+using OpenSage.Content;
 
 namespace OpenSage.Graphics
 {
-    public sealed class Model : DisposableBase
+    [DebuggerDisplay("Model '{Name}'")]
+    public sealed class Model : BaseAsset
     {
-        public ModelBone[] Bones { get; }
-        public ModelMesh[] Meshes { get; }
-        public Animation.Animation[] Animations { get; }
-
-        internal Model(
-            ModelBone[] bones,
-            ModelMesh[] meshes,
-            Animation.Animation[] animations)
+        internal static Model ParseAsset(BinaryReader reader, Asset asset, AssetImportCollection imports)
         {
-            Bones = bones;
+            var hierarchy = imports.GetImportedData<ModelBoneHierarchy>(reader).Value;
+            var subObjects = reader.ReadArrayAtOffset(() => W3xSubObject.Parse(reader, imports));
 
-            foreach (var mesh in meshes)
+            var modelSubObjects = new ModelSubObject[subObjects.Length];
+            for (var i = 0; i < subObjects.Length; i++)
             {
-                AddDisposable(mesh);
+                var subObject = subObjects[i];
+                modelSubObjects[i] = new ModelSubObject(
+                    subObject.Name,
+                    hierarchy.Bones[subObject.BoneIndex],
+                    subObject.RenderObject);
             }
-            Meshes = meshes;
 
-            Animations = animations;
+            return new Model(asset, hierarchy, modelSubObjects);
         }
 
-        public ModelInstance CreateInstance(GraphicsDevice graphicsDevice)
+        public readonly ModelBoneHierarchy BoneHierarchy;
+        public readonly ModelSubObject[] SubObjects;
+
+        internal Model(
+            string name,
+            ModelBoneHierarchy boneHierarchy,
+            ModelSubObject[] subObjects)
+            : this(boneHierarchy, subObjects)
         {
-            return new ModelInstance(this, graphicsDevice);
+            SetNameAndInstanceId("W3DContainer", name);
+        }
+
+        internal Model(
+            Asset asset,
+            ModelBoneHierarchy boneHierarchy,
+            ModelSubObject[] subObjects)
+            : this(boneHierarchy, subObjects)
+        {
+            SetNameAndInstanceId(asset);
+        }
+
+        private Model(
+            ModelBoneHierarchy boneHierarchy,
+            ModelSubObject[] subObjects)
+        {
+            BoneHierarchy = boneHierarchy;
+            SubObjects = subObjects;
+        }
+
+        internal ModelInstance CreateInstance(AssetLoadContext loadContext)
+        {
+            return new ModelInstance(this, loadContext);
         }
     }
 }

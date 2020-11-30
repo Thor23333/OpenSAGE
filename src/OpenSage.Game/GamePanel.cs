@@ -1,58 +1,41 @@
 ﻿using System;
-using OpenSage.Input;
+using OpenSage.Graphics;
 using Veldrid;
 using Rectangle = OpenSage.Mathematics.Rectangle;
 
 namespace OpenSage
 {
-    public abstract class GamePanel : DisposableBase
+    public sealed class GamePanel : DisposableBase
     {
-        public abstract GraphicsDevice GraphicsDevice { get; }
+        private readonly RenderTarget _renderTarget;
 
-        public abstract event EventHandler FramebufferChanged;
+        public Framebuffer Framebuffer => _renderTarget.Framebuffer;
 
-        public abstract Framebuffer Framebuffer { get; }
+        public OutputDescription OutputDescription { get; } = RenderTarget.OutputDescription;
 
-        public abstract event EventHandler ClientSizeChanged;
+        public event EventHandler ClientSizeChanged;
 
-        public abstract Rectangle ClientBounds { get; }
+        public Rectangle Frame { get; private set; }
 
-        public abstract event EventHandler<InputMessageEventArgs> InputMessageReceived;
+        public Rectangle ClientBounds => new Rectangle(0, 0, Frame.Width, Frame.Height);
 
-        public void SetCursor(Cursor cursor)
+        internal GamePanel(GraphicsDevice graphicsDevice)
         {
-            // TODO
+            _renderTarget = AddDisposable(new RenderTarget(graphicsDevice));
         }
 
-        public static GamePanel FromGameWindow(GameWindow window) => new GameWindowPanel(window);
-
-        private sealed class GameWindowPanel : GamePanel
+        public void EnsureFrame(in Rectangle frame)
         {
-            private readonly GameWindow _window;
-
-            public override event EventHandler FramebufferChanged;
-
-            public override GraphicsDevice GraphicsDevice => _window.GraphicsDevice;
-
-            public override Framebuffer Framebuffer => _window.GraphicsDevice.SwapchainFramebuffer;
-
-            public override event EventHandler ClientSizeChanged
+            if (frame == Frame)
             {
-                add => _window.ClientSizeChanged += value;
-                remove => _window.ClientSizeChanged -= value;
+                return;
             }
 
-            public override Rectangle ClientBounds => _window.ClientBounds;
+            Frame = frame;
 
-            public override event EventHandler<InputMessageEventArgs> InputMessageReceived
+            if (_renderTarget.EnsureSize(frame.Size))
             {
-                add => _window.InputMessageReceived += value;
-                remove => _window.InputMessageReceived -= value;
-            }
-
-            public GameWindowPanel(GameWindow window)
-            {
-                _window = window;
+                ClientSizeChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }

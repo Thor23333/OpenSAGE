@@ -1,7 +1,10 @@
-﻿using System.Numerics;
-using System.Runtime.InteropServices;
+﻿using System;
+using System.Numerics;
+using OpenSage.Content;
 using OpenSage.Data.Map;
-using OpenSage.Graphics.Effects;
+using OpenSage.Graphics.Rendering.Shadows;
+using OpenSage.Graphics.Rendering.Water;
+using OpenSage.Graphics.Shaders;
 using OpenSage.Gui;
 using OpenSage.Mathematics;
 using Veldrid;
@@ -10,24 +13,46 @@ namespace OpenSage.Graphics.Rendering
 {
     internal sealed class RenderPipeline : DisposableBase
     {
+        public event EventHandler<Rendering2DEventArgs> Rendering2D;
+        public event EventHandler<BuildingRenderListEventArgs> BuildingRenderList;
+
+        private const int ParallelCullingBatchSize = 128;
+
+        private static readonly RgbaFloat ClearColor = new RgbaFloat(105, 105, 105, 255);
+
         public static readonly OutputDescription GameOutputDescription = new OutputDescription(
-            new OutputAttachmentDescription(PixelFormat.D32_Float_S8_UInt),
+            new OutputAttachmentDescription(PixelFormat.D24_UNorm_S8_UInt),
             new OutputAttachmentDescription(PixelFormat.B8_G8_R8_A8_UNorm));
 
         private readonly RenderList _renderList;
 
         private readonly CommandList _commandList;
 
-        private readonly ConstantBuffer<GlobalConstantsShared> _globalConstantBufferShared;
-        private readonly ConstantBuffer<GlobalConstantsVS> _globalConstantBufferVS;
-        private readonly ConstantBuffer<GlobalConstantsPS> _globalConstantBufferPS;
-        private readonly ConstantBuffer<RenderItemConstantsVS> _renderItemConstantsBufferVS;
-        private readonly ConstantBuffer<LightingConstantsVS> _globalLightingVSTerrainBuffer;
-        private readonly ConstantBuffer<LightingConstantsPS> _globalLightingPSTerrainBuffer;
-        private readonly ConstantBuffer<LightingConstantsVS> _globalLightingVSObjectBuffer;
-        private readonly ConstantBuffer<LightingConstantsPS> _globalLightingPSObjectBuffer;
+        private readonly GraphicsLoadContext _loadContext;
+        private readonly GlobalShaderResources _globalShaderResources;
+        private readonly GlobalShaderResourceData _globalShaderResourceData;
+
+        private readonly ConstantBuffer<MeshShaderResources.RenderItemConstantsVS> _renderItemConstantsBufferVS;
+        private readonly ConstantBuffer<MeshShaderResources.RenderItemConstantsPS> _renderItemConstantsBufferPS;
+        private readonly ResourceSet _renderItemConstantsResourceSet;
 
         private readonly DrawingContext2D _drawingContext;
+
+        private readonly ShadowMapRenderer _shadowMapRenderer;
+        private readonly WaterMapRenderer _waterMapRenderer;
+
+        private Texture _intermediateDepthBuffer;
+        private Texture _intermediateTexture;
+        private Framebuffer _intermediateFramebuffer;
+
+        private readonly TextureCopier _textureCopier;
+
+        public Texture ShadowMap => _shadowMapRenderer.ShadowMap;
+        public Texture ReflectionMap => _waterMapRenderer.ReflectionMap;
+        public Texture RefractionMap => _waterMapRenderer.RefractionMap;
+
+        public int RenderedObjectsOpaque { get; private set; }
+        public int RenderedObjectsTransparent { get; private set; }
 
         public RenderPipeline(Game game)
         {
@@ -35,290 +60,399 @@ namespace OpenSage.Graphics.Rendering
 
             var graphicsDevice = game.GraphicsDevice;
 
-            _globalConstantBufferShared = AddDisposable(new ConstantBuffer<GlobalConstantsShared>(graphicsDevice, "GlobalConstantsSharedBuffer"));
-            _globalConstantBufferVS = AddDisposable(new ConstantBuffer<GlobalConstantsVS>(graphicsDevice, "GlobalConstantsVSBuffer"));
-            _renderItemConstantsBufferVS = AddDisposable(new ConstantBuffer<RenderItemConstantsVS>(graphicsDevice, "RenderItemConstantsVSBuffer"));
-            _globalConstantBufferPS = AddDisposable(new ConstantBuffer<GlobalConstantsPS>(graphicsDevice, "GlobalConstantsPSBuffer"));
-            _globalLightingVSTerrainBuffer = AddDisposable(new ConstantBuffer<LightingConstantsVS>(graphicsDevice, "Global_LightingConstantsVSBuffer (terrain)"));
-            _globalLightingPSTerrainBuffer = AddDisposable(new ConstantBuffer<LightingConstantsPS>(graphicsDevice, "Global_LightingConstantsPSBuffer (terrain)"));
-            _globalLightingVSObjectBuffer = AddDisposable(new ConstantBuffer<LightingConstantsVS>(graphicsDevice, "Global_LightingConstantsVSBuffer (objects)"));
-            _globalLightingPSObjectBuffer = AddDisposable(new ConstantBuffer<LightingConstantsPS>(graphicsDevice, "Global_LightingConstantsPSBuffer (objects)"));
+            _loadContext = game.GraphicsLoadContext;
+
+            _globalShaderResources = game.GraphicsLoadContext.ShaderResources.Global;
+            _globalShaderResourceData = AddDisposable(new GlobalShaderResourceData(game.GraphicsDevice, _globalShaderResources));
+
+            _renderItemConstantsBufferVS = AddDisposable(new ConstantBuffer<MeshShaderResources.RenderItemConstantsVS>(graphicsDevice, "RenderItemConstantsVS"));
+            _renderItemConstantsBufferPS = AddDisposable(new ConstantBuffer<MeshShaderResources.RenderItemConstantsPS>(graphicsDevice, "RenderItemConstantsPS"));
+
+            _renderItemConstantsResourceSet = AddDisposable(graphicsDevice.ResourceFactory.CreateResourceSet(
+                new ResourceSetDescription(
+                    game.GraphicsLoadContext.ShaderResources.Mesh.RenderItemConstantsResourceLayout,
+                    _renderItemConstantsBufferVS.Buffer,
+                    _renderItemConstantsBufferPS.Buffer)));
 
             _commandList = AddDisposable(graphicsDevice.ResourceFactory.CreateCommandList());
 
             _drawingContext = AddDisposable(new DrawingContext2D(
                 game.ContentManager,
+                game.GraphicsLoadContext,
                 BlendStateDescription.SingleAlphaBlend,
                 GameOutputDescription));
+
+            _shadowMapRenderer = AddDisposable(new ShadowMapRenderer(game.GraphicsDevice, game.GraphicsLoadContext.ShaderResources.Global));
+            _waterMapRenderer = AddDisposable(new WaterMapRenderer(game.AssetStore, _loadContext, game.GraphicsDevice, game.GraphicsLoadContext.ShaderResources.Global));
+
+            _textureCopier = AddDisposable(new TextureCopier(
+                game,
+                game.Panel.OutputDescription));
+        }
+
+        private void EnsureIntermediateFramebuffer(GraphicsDevice graphicsDevice, Framebuffer target)
+        {
+            if (_intermediateDepthBuffer != null && _intermediateDepthBuffer.Width == target.Width && _intermediateDepthBuffer.Height == target.Height)
+            {
+                return;
+            }
+
+            RemoveAndDispose(ref _intermediateDepthBuffer);
+            RemoveAndDispose(ref _intermediateTexture);
+            RemoveAndDispose(ref _intermediateFramebuffer);
+
+            _intermediateDepthBuffer = AddDisposable(graphicsDevice.ResourceFactory.CreateTexture(
+                TextureDescription.Texture2D(target.Width, target.Height, 1, 1, PixelFormat.D24_UNorm_S8_UInt, TextureUsage.DepthStencil)));
+
+            _intermediateTexture = AddDisposable(graphicsDevice.ResourceFactory.CreateTexture(
+                TextureDescription.Texture2D(target.Width, target.Height, 1, 1, target.ColorTargets[0].Target.Format, TextureUsage.RenderTarget | TextureUsage.Sampled)));
+
+            _intermediateFramebuffer = AddDisposable(graphicsDevice.ResourceFactory.CreateFramebuffer(
+                new FramebufferDescription(_intermediateDepthBuffer, _intermediateTexture)));
         }
 
         public void Execute(RenderContext context)
         {
+            RenderedObjectsOpaque = 0;
+            RenderedObjectsTransparent = 0;
+
+            EnsureIntermediateFramebuffer(context.GraphicsDevice, context.RenderTarget);
+
             _renderList.Clear();
 
-            context.Scene?.BuildRenderList(_renderList, context.Camera);
-
-            foreach (var system in context.Game.GameSystems)
-            {
-                system.BuildRenderList(_renderList);
-            }
-
-            context.Game.RaiseBuildingRenderList(new BuildingRenderListEventArgs(
+            context.Scene3D?.BuildRenderList(
                 _renderList,
-                context.Camera));
+                context.Scene3D.Camera,
+                context.GameTime);
 
-            var commandEncoder = _commandList;
+            BuildingRenderList?.Invoke(this, new BuildingRenderListEventArgs(
+                _renderList,
+                context.Scene3D?.Camera,
+                context.GameTime));
 
-            commandEncoder.Begin();
+            _commandList.Begin();
 
-            commandEncoder.SetFramebuffer(context.RenderTarget);
-
-            commandEncoder.ClearColorTarget(0, ColorRgba.DimGray.ToColorRgbaF().ToRgbaFloat());
-            commandEncoder.ClearDepthStencil(1);
-
-            commandEncoder.SetViewport(0, context.Game.Viewport);
-
-            UpdateGlobalConstantBuffers(commandEncoder, context);
-
-            Texture cloudTexture;
-            if (context.Scene != null
-                && context.Scene.Lighting.TimeOfDay != TimeOfDay.Night
-                && context.Scene.Lighting.EnableCloudShadows
-                && context.Scene.Terrain != null)
+            if (context.Scene3D != null)
             {
-                cloudTexture = context.Scene.Terrain.CloudTexture;
+                _commandList.PushDebugGroup("3D Scene");
+                Render3DScene(_commandList, context.Scene3D, context);
+                _commandList.PopDebugGroup();
             }
             else
             {
-                cloudTexture = context.Game.ContentManager.SolidWhiteTexture;
+                _commandList.SetFramebuffer(_intermediateFramebuffer);
+                _commandList.ClearColorTarget(0, ClearColor);
             }
-
-            void doRenderPass(RenderBucket bucket)
-            {
-                Culler.Cull(bucket.RenderItems, bucket.CulledItems, context);
-
-                if (bucket.CulledItems.Count == 0)
-                {
-                    return;
-                }
-
-                bucket.CulledItems.Sort();
-
-                RenderItem? lastRenderItem = null;
-                Matrix4x4? lastWorld = null;
-
-                foreach (var renderItem in bucket.CulledItems)
-                {
-                    if (lastRenderItem == null || lastRenderItem.Value.Effect != renderItem.Effect)
-                    {
-                        var effect = renderItem.Effect;
-
-                        effect.Begin(commandEncoder);
-
-                        SetDefaultConstantBuffers(renderItem.Material);
-
-                        var cloudTextureParameter = renderItem.Effect.GetParameter("Global_CloudTexture", throwIfMissing: false);
-                        if (cloudTextureParameter != null)
-                        {
-                            renderItem.Material.SetProperty("Global_CloudTexture", cloudTexture);
-                        }
-                    }
-
-                    if (lastRenderItem == null || lastRenderItem.Value.Material != renderItem.Material)
-                    {
-                        renderItem.Material.ApplyPipelineState();
-                        renderItem.Effect.ApplyPipelineState(commandEncoder);
-                    }
-
-                    if (lastRenderItem == null || lastRenderItem.Value.VertexBuffer0 != renderItem.VertexBuffer0)
-                    {
-                        commandEncoder.SetVertexBuffer(0, renderItem.VertexBuffer0);
-                    }
-
-                    if (lastRenderItem == null || lastRenderItem.Value.VertexBuffer1 != renderItem.VertexBuffer1)
-                    {
-                        if (renderItem.VertexBuffer1 != null)
-                        {
-                            commandEncoder.SetVertexBuffer(1, renderItem.VertexBuffer1);
-                        }
-                    }
-
-                    var renderItemConstantsVSParameter = renderItem.Effect.GetParameter("RenderItemConstantsVSBuffer");
-                    if (renderItemConstantsVSParameter != null)
-                    {
-                        if (lastWorld == null || lastWorld.Value != renderItem.World)
-                        {
-                            _renderItemConstantsBufferVS.Value.World = renderItem.World;
-                            _renderItemConstantsBufferVS.Update(commandEncoder);
-
-                            lastWorld = renderItem.World;
-                        }
-
-                        renderItem.Material.SetProperty(
-                            "RenderItemConstantsVSBuffer",
-                            _renderItemConstantsBufferVS.Buffer);
-                    }
-
-                    renderItem.Material.ApplyProperties();
-                    renderItem.Effect.ApplyParameters(commandEncoder);
-
-                    switch (renderItem.DrawCommand)
-                    {
-                        case DrawCommand.Draw:
-                            commandEncoder.Draw(
-                                renderItem.VertexCount,
-                                1,
-                                renderItem.VertexStart,
-                                0);
-                            break;
-
-                        case DrawCommand.DrawIndexed:
-                            commandEncoder.SetIndexBuffer(renderItem.IndexBuffer, IndexFormat.UInt16);
-                            commandEncoder.DrawIndexed(
-                                renderItem.IndexCount,
-                                1,
-                                renderItem.StartIndex,
-                                0,
-                                0);
-                            break;
-
-                        default:
-                            throw new System.Exception();
-                    }
-
-                    lastRenderItem = renderItem;
-                }
-            }
-
-            doRenderPass(_renderList.Opaque);
-            doRenderPass(_renderList.Transparent);
 
             // GUI and camera-dependent 2D elements
             {
+                _commandList.PushDebugGroup("2D Scene");
+
                 _drawingContext.Begin(
-                    commandEncoder,
-                    context.Game.ContentManager.LinearClampSampler,
-                    new SizeF(context.Game.Viewport.Width, context.Game.Viewport.Height));
+                    _commandList,
+                    _loadContext.StandardGraphicsResources.LinearClampSampler,
+                    new SizeF(context.RenderTarget.Width, context.RenderTarget.Height));
 
-                context.Game.Scene3D?.Render(_drawingContext);
-                context.Game.Scene2D.Render(_drawingContext);
+                context.Scene3D?.Render(_drawingContext);
+                context.Scene2D?.Render(_drawingContext);
 
-                context.Game.RaiseRendering2D(new Rendering2DEventArgs(_drawingContext));
+                Rendering2D?.Invoke(this, new Rendering2DEventArgs(_drawingContext));
 
                 _drawingContext.End();
+
+                _commandList.PopDebugGroup();
             }
 
-            commandEncoder.End();
+            _commandList.End();
 
-            context.GraphicsDevice.SubmitCommands(commandEncoder);
+            context.GraphicsDevice.SubmitCommands(_commandList);
 
-            context.GraphicsDevice.SwapBuffers();
+            _textureCopier.Execute(
+                _intermediateTexture,
+                context.RenderTarget);
         }
 
-        private void SetDefaultConstantBuffers(EffectMaterial material)
+        private void Render3DScene(
+            CommandList commandList,
+            Scene3D scene,
+            RenderContext context)
         {
-            void setDefaultConstantBuffer(string name, DeviceBuffer buffer)
+            ResourceSet cloudResourceSet;
+            if (scene.Lighting.TimeOfDay != TimeOfDay.Night
+                && scene.Lighting.EnableCloudShadows
+                && scene.Terrain != null)
             {
-                var parameter = material.Effect.GetParameter(name, throwIfMissing: false);
-                if (parameter != null)
-                {
-                    material.SetProperty(name, buffer);
-                }
+                cloudResourceSet = scene.Terrain.CloudResourceSet;
+            }
+            else
+            {
+                cloudResourceSet = _globalShaderResources.DefaultCloudResourceSet;
             }
 
-            setDefaultConstantBuffer("GlobalConstantsSharedBuffer", _globalConstantBufferShared.Buffer);
-            setDefaultConstantBuffer("GlobalConstantsVSBuffer", _globalConstantBufferVS.Buffer);
-            setDefaultConstantBuffer("GlobalConstantsPSBuffer", _globalConstantBufferPS.Buffer);
+            // Shadow map passes.
 
-            switch (material.LightingType)
+            commandList.PushDebugGroup("Shadow pass");
+
+            _shadowMapRenderer.RenderShadowMap(
+                scene,
+                context.GraphicsDevice,
+                commandList,
+                (framebuffer, lightBoundingFrustum) =>
+                {
+                    commandList.SetFramebuffer(framebuffer);
+
+                    commandList.ClearDepthStencil(1);
+
+                    commandList.SetFullViewports();
+
+                    var shadowViewProjection = lightBoundingFrustum.Matrix;
+                    _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, shadowViewProjection, null, null);
+
+                    DoRenderPass(context, commandList, _renderList.Shadow, lightBoundingFrustum, null);
+                });
+
+            commandList.PopDebugGroup();
+
+            // Standard pass.
+
+            commandList.PushDebugGroup("Forward pass");
+
+            commandList.SetFramebuffer(_intermediateFramebuffer);
+
+            _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, scene.Camera.ViewProjection, null, null);
+            _globalShaderResourceData.UpdateStandardPassConstantBuffers(commandList, context);
+
+            commandList.ClearColorTarget(0, ClearColor);
+            commandList.ClearDepthStencil(1);
+
+            commandList.SetFullViewports();
+
+            var standardPassCameraFrustum = scene.Camera.BoundingFrustum;
+
+            commandList.PushDebugGroup("Terrain");
+            RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Terrain, standardPassCameraFrustum, cloudResourceSet);
+            commandList.PopDebugGroup();
+
+            commandList.PushDebugGroup("Road");
+            RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Road, standardPassCameraFrustum, cloudResourceSet);
+            commandList.PopDebugGroup();
+
+            commandList.PushDebugGroup("Opaque");
+            RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Opaque, standardPassCameraFrustum, cloudResourceSet);
+            commandList.PopDebugGroup();
+
+            commandList.PushDebugGroup("Transparent");
+            RenderedObjectsTransparent = DoRenderPass(context, commandList, _renderList.Transparent, standardPassCameraFrustum, cloudResourceSet);
+            commandList.PopDebugGroup();
+
+            commandList.PushDebugGroup("Water");
+            DoRenderPass(context, commandList, _renderList.Water, standardPassCameraFrustum, cloudResourceSet);
+            commandList.PopDebugGroup();
+
+            commandList.PopDebugGroup();
+
+            scene.Game.Scripting.CameraFadeOverlay.Render(
+                commandList,
+                new SizeF(context.RenderTarget.Width, context.RenderTarget.Height));
+        }
+
+        private void CalculateWaterShaderMap(Scene3D scene, RenderContext context, CommandList commandList, RenderItem renderItem, ResourceSet cloudResourceSet)
+        {
+            _waterMapRenderer.RenderWaterShaders(
+                scene,
+                context.GraphicsDevice,
+                commandList,
+                (reflectionFramebuffer, refractionFramebuffer) =>
+                {
+                    var camera = scene.Camera;
+                    var clippingOffset = scene.Waters.ClippingOffset;
+                    var originalFarPlaneDistance = camera.FarPlaneDistance;
+                    var pivot = renderItem.World.Translation.Y;
+
+                    if (refractionFramebuffer != null)
+                    {
+                        commandList.PushDebugGroup("Refraction");
+                        camera.FarPlaneDistance = scene.Waters.RefractionRenderDistance;
+
+                        var clippingPlaneTop = new Plane(-Vector3.UnitZ, pivot + clippingOffset);
+
+                        var transparentWaterDepth = scene.AssetLoadContext.AssetStore.WaterTransparency.Current.TransparentWaterDepth;
+                        var clippingPlaneBottom = new Plane(Vector3.UnitZ, -pivot + transparentWaterDepth);
+
+                        // Render normal scene for water refraction shader
+                        _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, camera.ViewProjection, clippingPlaneTop.AsVector4(), clippingPlaneBottom.AsVector4());
+                        _globalShaderResourceData.UpdateStandardPassConstantBuffers(commandList, context);
+
+                        commandList.SetFramebuffer(refractionFramebuffer);
+
+                        commandList.ClearColorTarget(0, ClearColor);
+                        commandList.ClearDepthStencil(1);
+
+                        commandList.SetFullViewports();
+
+                        RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Terrain, camera.BoundingFrustum, cloudResourceSet, clippingPlaneTop, clippingPlaneBottom);
+                        RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Opaque, camera.BoundingFrustum, cloudResourceSet, clippingPlaneTop, clippingPlaneBottom);
+                        commandList.PopDebugGroup();
+                    }
+
+                    if (reflectionFramebuffer != null)
+                    {
+                        commandList.PushDebugGroup("Reflection");
+                        camera.FarPlaneDistance = scene.Waters.ReflectionRenderDistance;
+                        var clippingPlane = new Plane(Vector3.UnitZ, -pivot - clippingOffset);
+
+                        // TODO: Improve rendering speed somehow?
+                        // ------------------- Used for creating stencil mask -------------------
+                        _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, camera.ViewProjection, clippingPlane.AsVector4(), null);
+
+                        commandList.SetFramebuffer(reflectionFramebuffer);
+                        commandList.ClearColorTarget(0, ClearColor);
+                        commandList.ClearDepthStencil(1);
+
+                        RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Terrain, camera.BoundingFrustum, cloudResourceSet, clippingPlane);
+                        // -----------------------------------------------------------------------
+
+                        // Render inverted scene for water reflection shader
+                        camera.SetMirrorX(pivot);
+                        _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, camera.ViewProjection, clippingPlane.AsVector4(), null);
+
+                        //commandList.SetFramebuffer(reflectionFramebuffer);
+                        commandList.ClearColorTarget(0, ClearColor);
+                        //commandList.ClearDepthStencil(1);
+
+                        commandList.SetFullViewports();
+
+                        RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Terrain, camera.BoundingFrustum, cloudResourceSet, clippingPlane);
+                        RenderedObjectsOpaque += DoRenderPass(context, commandList, _renderList.Opaque, camera.BoundingFrustum, cloudResourceSet, clippingPlane);
+
+                        camera.SetMirrorX(pivot);
+                        commandList.PopDebugGroup();
+                    }
+
+                    if (reflectionFramebuffer != null || refractionFramebuffer != null)
+                    {
+                        camera.FarPlaneDistance = originalFarPlaneDistance;
+                        _globalShaderResourceData.UpdateGlobalConstantBuffers(commandList, camera.ViewProjection, null, null);
+                        _globalShaderResourceData.UpdateStandardPassConstantBuffers(commandList, context);
+
+                        // Reset the render item pipeline
+                        commandList.SetFramebuffer(_intermediateFramebuffer);
+                        commandList.InsertDebugMarker("Setting pipeline");
+                        commandList.SetPipeline(renderItem.Pipeline);
+                    }
+
+                    SetGlobalResources(commandList, renderItem.ShaderSet.GlobalResourceSetIndices, cloudResourceSet);
+                    commandList.SetGraphicsResourceSet(4, _waterMapRenderer.ResourceSetForRendering);
+                });
+        }
+
+        private int DoRenderPass(
+            RenderContext context,
+            CommandList commandList,
+            RenderBucket bucket,
+            BoundingFrustum cameraFrustum,
+            ResourceSet cloudResourceSet,
+            in Plane? clippingPlane1 = null,
+            in Plane? clippingPlane2 = null)
+        {
+            // TODO: Make culling batch size configurable at runtime
+            bucket.RenderItems.CullAndSort(cameraFrustum, clippingPlane1, clippingPlane2, ParallelCullingBatchSize);
+
+            if (bucket.RenderItems.CulledItemIndices.Count == 0)
+            {
+                return 0;
+            }
+
+            Matrix4x4? lastWorld = null;
+            int? lastRenderItemIndex = null;
+
+            foreach (var i in bucket.RenderItems.CulledItemIndices)
+            {
+                ref var renderItem = ref bucket.RenderItems[i];
+
+                commandList.PushDebugGroup($"Render item: {renderItem.DebugName}");
+
+                if (lastRenderItemIndex == null || bucket.RenderItems[lastRenderItemIndex.Value].Pipeline != renderItem.Pipeline)
+                {
+                    commandList.InsertDebugMarker("Setting pipeline");
+                    commandList.SetPipeline(renderItem.Pipeline);
+                    SetGlobalResources(commandList, renderItem.ShaderSet.GlobalResourceSetIndices, cloudResourceSet);
+                }
+
+                if (renderItem.ShaderSet.GlobalResourceSetIndices.RenderItemConstants != null)
+                {
+                    if (lastWorld == null || lastWorld.Value != renderItem.World)
+                    {
+                        _renderItemConstantsBufferVS.Value.World = renderItem.World;
+                        _renderItemConstantsBufferVS.Update(commandList);
+
+                        lastWorld = renderItem.World;
+                    }
+
+                    if (renderItem.RenderItemConstantsPS != null)
+                    {
+                        _renderItemConstantsBufferPS.Value = renderItem.RenderItemConstantsPS.Value;
+                        _renderItemConstantsBufferPS.Update(commandList);
+                    }
+                }
+
+                if (bucket.RenderItemName == "Water")
+                {
+                    CalculateWaterShaderMap(context.Scene3D, context, commandList, renderItem, cloudResourceSet);
+                }
+                renderItem.BeforeRenderCallback.Invoke(commandList, context);
+
+                commandList.SetIndexBuffer(renderItem.IndexBuffer, IndexFormat.UInt16);
+                commandList.DrawIndexed(
+                    renderItem.IndexCount,
+                    1,
+                    renderItem.StartIndex,
+                    0,
+                    0);
+
+                lastRenderItemIndex = i;
+
+                commandList.PopDebugGroup();
+            }
+
+            return bucket.RenderItems.CulledItemIndices.Count;
+        }
+
+        private void SetGlobalResources(
+            CommandList commandList,
+            GlobalResourceSetIndices indices,
+            ResourceSet cloudResourceSet)
+        {
+            if (indices.GlobalConstants != null)
+            {
+                commandList.SetGraphicsResourceSet(indices.GlobalConstants.Value, _globalShaderResourceData.GlobalConstantsResourceSet);
+            }
+
+            switch (indices.LightingType)
             {
                 case LightingType.Terrain:
-                    setDefaultConstantBuffer("Global_LightingConstantsVSBuffer", _globalLightingVSTerrainBuffer.Buffer);
-                    setDefaultConstantBuffer("Global_LightingConstantsPSBuffer", _globalLightingPSTerrainBuffer.Buffer);
+                    commandList.SetGraphicsResourceSet(indices.GlobalLightingConstants.Value, _globalShaderResourceData.GlobalLightingConstantsTerrainResourceSet);
                     break;
 
                 case LightingType.Object:
-                    setDefaultConstantBuffer("Global_LightingConstantsVSBuffer", _globalLightingVSObjectBuffer.Buffer);
-                    setDefaultConstantBuffer("Global_LightingConstantsPSBuffer", _globalLightingPSObjectBuffer.Buffer);
+                    commandList.SetGraphicsResourceSet(indices.GlobalLightingConstants.Value, _globalShaderResourceData.GlobalLightingConstantsObjectResourceSet);
                     break;
             }
-        }
 
-        private void UpdateGlobalConstantBuffers(CommandList commandEncoder, RenderContext context)
-        {
-            var cloudShadowView = Matrix4x4.CreateLookAt(
-                Vector3.Zero,
-                Vector3.Normalize(new Vector3(0, 0.2f, -1)),
-                Vector3.UnitY);
-
-            var cloudShadowProjection = Matrix4x4.CreateOrthographic(1, 1, 0, 1);
-
-            var lightingConstantsVS = new LightingConstantsVS
+            if (indices.CloudConstants != null)
             {
-                CloudShadowMatrix = cloudShadowView * cloudShadowProjection
-            };
-
-            if (context.Scene != null)
-            {
-                var cameraPosition = Matrix4x4Utility.Invert(context.Camera.View).Translation;
-
-                _globalConstantBufferShared.Value.CameraPosition = cameraPosition;
-                _globalConstantBufferShared.Value.TimeInSeconds = (float) context.GameTime.TotalGameTime.TotalSeconds;
-                _globalConstantBufferShared.Update(commandEncoder);
-
-                _globalConstantBufferVS.Value.ViewProjection = context.Camera.View * context.Camera.Projection;
-                _globalConstantBufferVS.Update(commandEncoder);
-
-                void updateLightingBuffer(
-                    ConstantBuffer<LightingConstantsVS> bufferVS,
-                    ConstantBuffer<LightingConstantsPS> bufferPS,
-                    in LightingConstantsPS constantsPS)
-                {
-                    bufferVS.Value = lightingConstantsVS;
-                    bufferVS.Update(commandEncoder);
-
-                    bufferPS.Value = constantsPS;
-                    bufferPS.Update(commandEncoder);
-                }
-
-                updateLightingBuffer(
-                    _globalLightingVSTerrainBuffer,
-                    _globalLightingPSTerrainBuffer,
-                    context.Scene.Lighting.CurrentLightingConfiguration.TerrainLightsPS);
-
-                updateLightingBuffer(
-                    _globalLightingVSObjectBuffer,
-                    _globalLightingPSObjectBuffer,
-                    context.Scene.Lighting.CurrentLightingConfiguration.ObjectLightsPS);
+                commandList.SetGraphicsResourceSet(indices.CloudConstants.Value, cloudResourceSet);
             }
 
-            _globalConstantBufferPS.Value.ViewportSize = new Vector2(context.Game.Viewport.Width, context.Game.Viewport.Height);
-            _globalConstantBufferPS.Update(commandEncoder);
-        }
+            if (indices.ShadowConstants != null)
+            {
+                commandList.SetGraphicsResourceSet(indices.ShadowConstants.Value, _shadowMapRenderer.ResourceSetForRendering);
+            }
 
-        [StructLayout(LayoutKind.Sequential, Size = 16)]
-        private struct GlobalConstantsShared
-        {
-            public Vector3 CameraPosition;
-            public float TimeInSeconds;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct GlobalConstantsVS
-        {
-            public Matrix4x4 ViewProjection;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RenderItemConstantsVS
-        {
-            public Matrix4x4 World;
-        }
-
-        [StructLayout(LayoutKind.Sequential, Size = 16)]
-        private struct GlobalConstantsPS
-        {
-            public Vector2 ViewportSize;
+            if (indices.RenderItemConstants != null)
+            {
+                commandList.SetGraphicsResourceSet(indices.RenderItemConstants.Value, _renderItemConstantsResourceSet);
+            }
         }
     }
 }

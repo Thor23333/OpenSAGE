@@ -12,7 +12,7 @@ namespace OpenSage.Data.StreamFS
         public FileSystemEntry ManifestFileEntry { get; }
         public ManifestFile ManifestFile { get; }
 
-        public GameStream(FileSystemEntry manifestFileEntry)
+        public GameStream(FileSystemEntry manifestFileEntry, Game game)
         {
             ManifestFileEntry = manifestFileEntry;
             ManifestFile = ManifestFile.FromFileSystemEntry(manifestFileEntry);
@@ -25,6 +25,8 @@ namespace OpenSage.Data.StreamFS
                     asset.Header.InstanceId);
                 _assetReferenceToAssetLookup[assetReference] = asset;
             }
+
+            var assetParseContext = new AssetParseContext(game);
 
             // Parse .bin, .relo, and .imp files simultaneously.
             ParseStreamFile(".bin", 3132817408u, binReader =>
@@ -44,28 +46,60 @@ namespace OpenSage.Data.StreamFS
                                 out var relocationData,
                                 out var imports);
 
+                            asset.AssetImports = imports;
+
                             if (instanceData.Length == 0)
                             {
                                 continue;
                             }
 
-                            if (AssetReaderCatalog.TryGetAssetReader(asset.Header.TypeId, out var assetReader))
+                            if (Enum.IsDefined(typeof(AssetType), asset.Header.TypeId)) // TODO: Remove this.
                             {
-                                using (var instanceDataStream = new MemoryStream(instanceData, false))
-                                using (var instanceDataReader = new BinaryReader(instanceDataStream, Encoding.ASCII, true))
+                                if (AssetReaderCatalog.TryGetAssetReader(asset.Header.TypeId, out var assetReader))
                                 {
-                                    asset.InstanceData = assetReader.Parse(asset, instanceDataReader, relocationData, imports);
+                                    using (var instanceDataStream = new MemoryStream(instanceData, false))
+                                    using (var instanceDataReader = new BinaryReader(instanceDataStream, Encoding.ASCII, true))
+                                    {
+                                        var zero = instanceDataReader.ReadUInt32();
+                                        if (zero != 0)
+                                        {
+                                            throw new InvalidDataException();
+                                        }
+
+                                        asset.InstanceData = assetReader(asset, instanceDataReader, imports, assetParseContext);
+
+                                        var assetCollection = assetParseContext.AssetStore.GetAssetCollection(asset.Header.TypeId);
+                                        if (assetCollection != null) // TODO: Eventually this shouldn't be null.
+                                        {
+                                            assetCollection.Add(asset.InstanceData);
+                                        }
+                                        else
+                                        {
+                                            var singleAssetStorage = assetParseContext.AssetStore.GetSingleAsset(asset.Header.TypeId);
+                                            if (singleAssetStorage != null) // TODO: Eventually this shouldn't be null.
+                                            {
+                                                singleAssetStorage.Current = (BaseAsset) asset.InstanceData;
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    // TODO
                                 }
                             }
                             else
                             {
                                 // TODO
+                                Logger.Info($"Missing AssetType: {asset.Name.Split(':')[0]} = 0x{asset.Header.TypeId.ToString("X")},");
                             }
                         }
                     });
                 });
             });
         }
+
+        private static readonly NLog.Logger Logger = NLog.LogManager.GetCurrentClassLogger();
 
         private void ReadBinReloImpData(
             BinaryReader binReader,
@@ -74,7 +108,7 @@ namespace OpenSage.Data.StreamFS
             Asset asset,
             out byte[] instanceData,
             out uint[] relocationData,
-            out AssetImport[] imports)
+            out AssetImportCollection imports)
         {
             if (asset.Header.InstanceDataSize > 0)
             {
@@ -124,14 +158,15 @@ namespace OpenSage.Data.StreamFS
             {
                 throw new InvalidDataException();
             }
-            imports = new AssetImport[importData.Length];
+            var tempImports = new AssetImport[importData.Length];
             for (var i = 0; i < importData.Length; i++)
             {
                 var assetReference = asset.AssetReferences[i];
                 var referencedAsset = FindAsset(assetReference);
 
-                imports[i] = new AssetImport(importData[i], referencedAsset);
+                tempImports[i] = new AssetImport(importData[i], referencedAsset);
             }
+            imports = new AssetImportCollection(tempImports);
         }
 
         private void ParseStreamFile(string extension, uint streamTypeChecksum, Action<BinaryReader> callback)

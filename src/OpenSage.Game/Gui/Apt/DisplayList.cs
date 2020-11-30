@@ -1,20 +1,40 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace OpenSage.Gui.Apt
 {
     public sealed class DisplayList
     {
-        private Dictionary<int, IDisplayItem> _items;
+        private SortedDictionary<int, DisplayItem> _items;
+        private SortedDictionary<int, DisplayItem> _reverseItems;
 
-        public Dictionary<int, IDisplayItem> Items => _items;
+        public IReadOnlyDictionary<int, DisplayItem> Items => _items;
+        public IReadOnlyDictionary<int, DisplayItem> ReverseItems => _reverseItems;
+
+        class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
+        {
+            public int Compare(T x, T y)
+            {
+                return y.CompareTo(x);
+            }
+        }
 
         public DisplayList()
         {
-            _items = new Dictionary<int, IDisplayItem>();
+            _items = new SortedDictionary<int, DisplayItem>();
+            _reverseItems = new SortedDictionary<int, DisplayItem>(new DescendingComparer<int>());
+        }
+
+        public void AddItem(int depth, DisplayItem item)
+        {
+            _items[depth] = item;
+            _reverseItems[depth] = item;
+        }
+
+        public void RemoveItem(int depth)
+        {
+            _items.Remove(depth);
+            _reverseItems.Remove(depth);
         }
     }
 }

@@ -1,10 +1,11 @@
-﻿using OpenSage.Data.Ini.Parser;
+﻿using OpenSage.Data.Ini;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
     public sealed class CashBountyPowerModuleData : SpecialPowerModuleData
     {
-        internal static CashBountyPowerModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        internal static new CashBountyPowerModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
 
         private static new readonly IniParseTable<CashBountyPowerModuleData> FieldParseTable = SpecialPowerModuleData.FieldParseTable
             .Concat(new IniParseTable<CashBountyPowerModuleData>
@@ -12,6 +13,6 @@ namespace OpenSage.Logic.Object
                 { "Bounty", (parser, x) => x.Bounty = parser.ParsePercentage() },
             });
 
-        public float Bounty { get; private set; }
+        public Percentage Bounty { get; private set; }
     }
 }

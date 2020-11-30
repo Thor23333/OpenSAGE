@@ -1,8 +1,12 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
 
 namespace OpenSage.Logic.Object
 {
+    public sealed class StealthDetectorUpdate : UpdateModule
+    {
+        // TODO
+    }
+
     /// <summary>
     /// Display MESSAGE:StealthDiscovered when triggered.
     /// </summary>
@@ -24,7 +28,9 @@ namespace OpenSage.Logic.Object
             { "IRBrightParticleSysName", (parser, x) => x.IRBrightParticleSysName = parser.ParseAssetReference() },
             { "IRGridParticleSysName", (parser, x) => x.IRGridParticleSysName = parser.ParseAssetReference() },
             { "IRBeaconParticleSysName", (parser, x) => x.IRBeaconParticleSysName = parser.ParseAssetReference() },
-            { "IRParticleSysBone", (parser, x) => x.IRParticleSysBone = parser.ParseBoneName() }
+            { "IRParticleSysBone", (parser, x) => x.IRParticleSysBone = parser.ParseBoneName() },
+            { "CancelOneRingEffect", (parser, x) => x.CancelOneRingEffect = parser.ParseBoolean() },
+            { "RequiredUpgrade", (parser, x) => x.RequiredUpgrade = parser.ParseAssetReference() },
         };
 
         /// <summary>
@@ -49,5 +55,16 @@ namespace OpenSage.Logic.Object
         public string IRGridParticleSysName { get; private set; }
         public string IRBeaconParticleSysName { get; private set; }
         public string IRParticleSysBone { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public bool CancelOneRingEffect { get; private set; }
+
+        [AddedIn(SageGame.Bfme2)]
+        public string RequiredUpgrade { get; private set; }
+
+        internal override BehaviorModule CreateModule(GameObject gameObject, GameContext context)
+        {
+            return new StealthDetectorUpdate();
+        }
     }
 }

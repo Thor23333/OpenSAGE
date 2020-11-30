@@ -1,11 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using OpenSage.Data.Apt;
-using OpenSage.Data.Utilities;
+using OpenSage.FileFormats;
+using OpenSage.Gui.Apt.ActionScript.Library;
 
 namespace OpenSage.Gui.Apt.ActionScript
 {
@@ -36,10 +32,18 @@ namespace OpenSage.Gui.Apt.ActionScript
         private Function _function;
         private Value[] _array;
 
+        public bool IsNumericType()
+        {
+            return Type == ValueType.Float || Type == ValueType.Integer;
+        }
+
         public Value ResolveRegister(ActionContext context)
         {
             if (Type != ValueType.Register)
                 return this;
+
+            if (context.Registers.Length - 1 < _number)
+                return FromInteger(_number);
 
             return context.Registers[_number];
         }
@@ -47,18 +51,18 @@ namespace OpenSage.Gui.Apt.ActionScript
         public Value ResolveConstant(ActionContext context)
         {
             if (Type != ValueType.Constant)
-                throw new InvalidOperationException();
+                return this;
 
             Value result;
 
-            var entry = context.Apt.Constants.Entries[_number];
+            var entry = context.Constants[_number];
             switch (entry.Type)
             {
                 case ConstantEntryType.String:
-                    result = Value.FromString((string) entry.Value);
+                    result = FromString((string) entry.Value);
                     break;
                 case ConstantEntryType.Register:
-                    result = Value.FromRegister((uint) entry.Value);
+                    result = FromRegister((uint) entry.Value);
                     break;
                 default:
                     throw new NotImplementedException();
@@ -131,7 +135,7 @@ namespace OpenSage.Gui.Apt.ActionScript
             return v;
         }
 
-        public static Value FromFloat(float num)
+        public static Value FromFloat(double num)
         {
             var v = new Value();
             v.Type = ValueType.Float;
@@ -146,20 +150,39 @@ namespace OpenSage.Gui.Apt.ActionScript
             return v;
         }
 
+
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         public ObjectContext ToObject()
         {
+            if (Type == ValueType.Undefined)
+            {
+                logger.Error("Cannot create object from undefined!");
+                return null;
+            }
+
+            if (Type == ValueType.String)
+            {
+                return new ASString(_string);
+            }
+
             if (Type != ValueType.Object)
                 throw new InvalidOperationException();
 
             return _object;
         }
 
+        // Follow ECMA specification 9.4: https://www.ecma-international.org/ecma-262/5.1/#sec-9.4
         public int ToInteger()
         {
-            if (Type != ValueType.Integer && Type != ValueType.Constant)
-                throw new InvalidOperationException();
+            double floatNumber = ToFloat();
 
-            return _number;
+            if (double.IsNaN(floatNumber))
+            {
+                return 0;
+            }
+
+            return Math.Sign(floatNumber) * (int) Math.Abs(floatNumber);
         }
 
         public bool ToBoolean()
@@ -200,13 +223,47 @@ namespace OpenSage.Gui.Apt.ActionScript
             return _function;
         }
 
+        // Follow ECMA specification 9.8: https://www.ecma-international.org/ecma-262/5.1/#sec-9.8
         public override string ToString()
         {
-            if (Type != ValueType.String &&
-                Type != ValueType.Undefined)
-                throw new InvalidOperationException();
+            switch (Type)
+            {
+                case ValueType.String:
+                    return _string;
+                case ValueType.Boolean:
+                    return _boolean.ToString();
+                case ValueType.Short:
+                case ValueType.Integer:
+                    return _number.ToString();
+                case ValueType.Float:
+                    return _decimal.ToString();
+                case ValueType.Undefined:
+                    return "";
+                case ValueType.Object:
+                    return _object.Item.Name;
+                default:
+                    throw new NotImplementedException();
+            }
+        }
 
-            return _string;
+        // Follow ECMA specification 9.3: https://www.ecma-international.org/ecma-262/5.1/#sec-9.3
+        public double ToFloat()
+        {
+            switch (Type)
+            {
+                case ValueType.Constant:
+                case ValueType.Short:
+                case ValueType.Integer:
+                    return _number;
+                case ValueType.Float:
+                    return _decimal;
+                case ValueType.Undefined:
+                    return float.NaN;
+                case ValueType.Boolean:
+                    return _boolean ? 1.0 : 0.0;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         public TEnum ToEnum<TEnum>() where TEnum : struct
@@ -214,9 +271,14 @@ namespace OpenSage.Gui.Apt.ActionScript
             if (Type != ValueType.Integer)
                 throw new InvalidOperationException();
 
-            return EnumUtility.CastValueAsEnum<int,TEnum>(_number);
+            return EnumUtility.CastValueAsEnum<int, TEnum>(_number);
         }
 
+        //TODO: According to page 74, ActionEquals2 of SWF7 format specification
+        //http://www.prowiki.org/upload/HelmutLeitner/flash_file_format_specification.pdf
+        //Here an Abstract Equality Comparison Algorithm should be implemented.
+        //(Section 11.9.3, ECMAScript Specification 3)
+        //https://www-archive.mozilla.org/js/language/E262-3.pdf
         public bool Equals(Value b)
         {
             bool result;
@@ -224,6 +286,38 @@ namespace OpenSage.Gui.Apt.ActionScript
             if (Type != b.Type)
                 return false;
 
+            switch (Type)
+            {
+                case ValueType.Undefined:
+                    result = true;
+                    break;
+                case ValueType.String:
+                    result = (b._string == _string);
+                    break;
+                case ValueType.Boolean:
+                    result = b._boolean == _boolean;
+                    break;
+                case ValueType.Object:
+                    result = b._object == _object;
+                    break;
+                case ValueType.Integer:
+                    result = b._number == _number;
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
+
+            return result;
+        }
+
+        public bool StrictEquals(Value b)
+        {
+            bool result;
+
+            if (Type != b.Type)
+                return false;
+
+            //TODO: Implement Strict Equality Comparison Algorithm
             switch (Type)
             {
                 case ValueType.Undefined:

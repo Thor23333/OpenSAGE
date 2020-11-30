@@ -1,14 +1,15 @@
-﻿using System.Numerics;
-using OpenSage.Graphics.Effects;
+﻿using OpenSage.Graphics.Shaders;
 
 namespace OpenSage.Settings
 {
     public sealed class LightSettings
     {
-        public readonly LightingConstantsPS TerrainLightsPS;
-        public readonly LightingConstantsPS ObjectLightsPS;
+        internal readonly GlobalShaderResources.LightingConstantsPS TerrainLightsPS;
+        internal readonly GlobalShaderResources.LightingConstantsPS ObjectLightsPS;
 
-        public LightSettings(in LightingConstantsPS terrainLightsPS, in LightingConstantsPS objectLightsPS)
+        internal LightSettings(
+            in GlobalShaderResources.LightingConstantsPS terrainLightsPS,
+            in GlobalShaderResources.LightingConstantsPS objectLightsPS)
         {
             TerrainLightsPS = terrainLightsPS;
             ObjectLightsPS = objectLightsPS;

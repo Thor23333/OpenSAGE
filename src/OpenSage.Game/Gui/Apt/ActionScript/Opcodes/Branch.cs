@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace OpenSage.Gui.Apt.ActionScript.Opcodes
+﻿namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 {
     /// <summary>
     /// Pops a bool from the stack. If the bool is true jump to the byte offset (parameter)
@@ -12,7 +10,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var cond = context.Stack.Pop().ToBoolean();
+            var cond = context.Pop().ToBoolean();
 
             //when the condition is true make the stream jump
             if (cond)

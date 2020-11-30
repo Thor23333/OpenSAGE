@@ -1,7 +1,7 @@
 ﻿using System.IO;
 using OpenSage.Data;
 using OpenSage.Data.Apt;
-using OpenSage.Data.Big;
+using OpenSage.FileFormats.Big;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -16,7 +16,7 @@ namespace OpenSage.Tests.Data.Apt
             _output = output;
         }
 
-        [GameFact(SageGame.Bfme, SageGame.Bfme2, SageGame.Bfme2Rotwk)]
+        [GameFact(SageGame.Bfme, SageGame.Bfme2, SageGame.Bfme2Rotwk, Skip = "Const parsing is not fully implemented")]
         public void CanReadConstFiles()
         {
             InstalledFilesTestData.ReadFiles(".const", _output, entry =>

@@ -29,17 +29,26 @@ namespace OpenSage.Logic
                     {
                         _system.OnDragSelection(_mousePos);
                     }
+                    else
+                    {
+                        _system.OnHoverSelection(_mousePos);
+                    }
 
                     break;
+
                 case InputMessageType.MouseLeftButtonDown:
                     _system.OnStartDragSelection(_mousePos);
                     return InputMessageResult.Handled;
+
                 case InputMessageType.MouseLeftButtonUp:
                     if (_system.Selecting)
                     {
                         _system.OnEndDragSelection();
                     }
+                    break;
 
+                case InputMessageType.MouseRightButtonUp:
+                    _system.ClearSelectedObjectsForLocalPlayer();
                     break;
             }
 

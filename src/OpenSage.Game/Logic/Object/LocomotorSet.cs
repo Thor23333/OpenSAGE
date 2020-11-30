@@ -1,31 +1,24 @@
-﻿using OpenSage.Data.Ini;
+﻿using OpenSage.Content;
+using OpenSage.Data.Ini;
 
 namespace OpenSage.Logic.Object
 {
-    public enum LocomotorSet
+    public sealed class LocomotorSet
     {
-        [IniEnum("SET_NORMAL")]
-        Normal,
+        internal static LocomotorSet Parse(IniParser parser)
+        {
+            return parser.ParseBlock(FieldParseTable);
+        }
 
-        [IniEnum("SET_NORMAL_UPGRADED")]
-        NormalUpgraded,
+        private static readonly IniParseTable<LocomotorSet> FieldParseTable = new IniParseTable<LocomotorSet>
+        {
+            { "Locomotor", (parser, x) => x.Locomotor = parser.ParseLocomotorTemplateReference() },
+            { "Condition", (parser, x) => x.Condition = parser.ParseEnum<LocomotorSetType>() },
+            { "Speed", (parser, x) => x.Speed = parser.ParseFloat() },
+        };
 
-        [IniEnum("SET_WANDER")]
-        Wander,
-
-        [IniEnum("SET_PANIC")]
-        Panic,
-
-        [IniEnum("SET_FREEFALL")]
-        FreeFall,
-
-        [IniEnum("SET_TAXIING")]
-        Taxiing,
-
-        [IniEnum("SET_SUPERSONIC")]
-        Supersonic,
-
-        [IniEnum("SET_SLUGGISH")]
-        Sluggish
+        public LazyAssetReference<LocomotorTemplate> Locomotor { get; internal set; }
+        public LocomotorSetType Condition { get; internal set; }
+        public float Speed { get; internal set; }
     }
 }

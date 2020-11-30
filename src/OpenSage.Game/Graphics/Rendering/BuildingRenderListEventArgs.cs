@@ -3,24 +3,16 @@ using OpenSage.Graphics.Cameras;
 
 namespace OpenSage.Graphics.Rendering
 {
-    public sealed class BuildingRenderListEventArgs : EventArgs
+    internal sealed class BuildingRenderListEventArgs : EventArgs
     {
-        public RenderList RenderList { get; }
-        public CameraComponent Camera { get; }
+        public readonly RenderList RenderList;
+        public readonly Camera Camera;
+        public readonly TimeInterval GameTime;
 
-        public BuildingRenderListEventArgs(RenderList renderList, CameraComponent camera)
+        internal BuildingRenderListEventArgs(RenderList renderList, Camera camera, in TimeInterval gameTime)
         {
             RenderList = renderList;
             Camera = camera;
-        }
-    }
-
-    public sealed class GameUpdatingEventArgs : EventArgs
-    {
-        public GameTime GameTime { get; }
-
-        public GameUpdatingEventArgs(GameTime gameTime)
-        {
             GameTime = gameTime;
         }
     }

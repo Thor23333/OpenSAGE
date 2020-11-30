@@ -1,7 +1,16 @@
-﻿using OpenSage.Data.Ini.Parser;
+﻿using OpenSage.Data.Ini;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
+    public sealed class DozerAIUpdate : AIUpdate
+    {
+        internal DozerAIUpdate(GameObject gameObject, DozerAIUpdateModuleData moduleData)
+            : base(gameObject, moduleData)
+        {
+        }
+    }
+
     /// <summary>
     /// Allows the use of VoiceRepair, VoiceBuildResponse, VoiceNoBuild and VoiceTaskComplete 
     /// within UnitSpecificSounds section of the object.
@@ -9,9 +18,9 @@ namespace OpenSage.Logic.Object
     /// </summary>
     public sealed class DozerAIUpdateModuleData : AIUpdateModuleData
     {
-        internal static new DozerAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        internal new static DozerAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
 
-        private static new readonly IniParseTable<DozerAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
+        private new static readonly IniParseTable<DozerAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
             .Concat(new IniParseTable<DozerAIUpdateModuleData>
             {
                 { "RepairHealthPercentPerSecond", (parser, x) => x.RepairHealthPercentPerSecond = parser.ParsePercentage() },
@@ -19,8 +28,13 @@ namespace OpenSage.Logic.Object
                 { "BoredRange", (parser, x) => x.BoredRange = parser.ParseInteger() },
             });
 
-        public float RepairHealthPercentPerSecond { get; private set; }
+        public Percentage RepairHealthPercentPerSecond { get; private set; }
         public int BoredTime { get; private set; }
         public int BoredRange { get; private set; }
+
+        internal override AIUpdate CreateAIUpdate(GameObject gameObject)
+        {
+            return new DozerAIUpdate(gameObject, this);
+        }
     }
 }

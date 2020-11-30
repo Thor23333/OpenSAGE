@@ -1,31 +1,70 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using OpenSage.Content;
+using System.Runtime.InteropServices;
 using OpenSage.Mathematics;
 using OpenSage.Utilities;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Text;
 using Veldrid;
+using Veldrid.ImageSharp;
+using SizeF = OpenSage.Mathematics.SizeF;
 
 namespace OpenSage.Gui
 {
     internal sealed class TextCache : DisposableBase
     {
-        private struct TextKey
+        private readonly struct TextKey : IEquatable<TextKey>
         {
-            public string Text;
-            public Font Font;
-            public TextAlignment Alignment;
-            public ColorRgbaF Color;
-            public SizeF Size;
+            public readonly string Text;
+            public readonly Font Font;
+            public readonly TextAlignment Alignment;
+            public readonly ColorRgbaF Color;
+            public readonly SizeF Size;
+
+            public TextKey(string text, Font font, TextAlignment alignment, in ColorRgbaF color, in SizeF size)
+            {
+                Text = text;
+                Font = font;
+                Alignment = alignment;
+                Color = color;
+                Size = size;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is TextKey && Equals((TextKey) obj);
+            }
+
+            public bool Equals(TextKey other)
+            {
+                return
+                    Text == other.Text &&
+                    Font == other.Font &&
+                    Alignment == other.Alignment &&
+                    Color == other.Color &&
+                    Size == other.Size;
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(Text, Font, Alignment, Color, Size);
+            }
+
+            public static bool operator ==(TextKey key1, TextKey key2)
+            {
+                return key1.Equals(key2);
+            }
+
+            public static bool operator !=(TextKey key1, TextKey key2)
+            {
+                return !(key1 == key2);
+            }
         }
 
-        private readonly ContentManager _contentManager;
         private readonly GraphicsDevice _graphicsDevice;
         private readonly Dictionary<TextKey, Texture> _cache;
 
@@ -37,10 +76,9 @@ namespace OpenSage.Gui
 
         private readonly ResourcePool<Image<Bgra32>, ImageKey> _textImagePool;
 
-        public TextCache(ContentManager contentManager)
+        public TextCache(GraphicsDevice graphicsDevice)
         {
-            _contentManager = contentManager;
-            _graphicsDevice = contentManager.GraphicsDevice;
+            _graphicsDevice = graphicsDevice;
 
             _cache = new Dictionary<TextKey, Texture>();
 
@@ -48,16 +86,14 @@ namespace OpenSage.Gui
                 new Image<Bgra32>(key.Width, key.Height)));
         }
 
-        public Texture GetTextTexture(string text, Font font, TextAlignment textAlignment, ColorRgbaF color, SizeF size)
+        public Texture GetTextTexture(
+            string text,
+            Font font,
+            TextAlignment textAlignment,
+            in ColorRgbaF color,
+            in SizeF size)
         {
-            var key = new TextKey
-            {
-                Text = text,
-                Font = font,
-                Alignment = textAlignment,
-                Color = color,
-                Size = size
-            };
+            var key = new TextKey(text, font, textAlignment, color, size);
 
             if (!_cache.TryGetValue(key, out var result))
             {
@@ -74,49 +110,64 @@ namespace OpenSage.Gui
 
             var image = _textImagePool.Acquire(new ImageKey
             {
-                Width = (int) Math.Ceiling(size.Width),
-                Height = (int) Math.Ceiling(size.Height)
+                Width = (int) MathF.Ceiling(size.Width),
+                Height = (int) MathF.Ceiling(size.Height)
             });
-
-            // Clear image to transparent.
-            // TODO: Don't need to do this for a newly created image.
-            fixed (void* pin = &image.DangerousGetPinnableReferenceToPixelBuffer())
-            {
-                Unsafe.InitBlock(pin, 0, (uint) (image.Width * image.Height * 4));
-            }
 
             image.Mutate(x =>
             {
-                var location = new SixLabors.Primitives.PointF(0, size.Height / 2.0f);
+                var location = new PointF(0, size.Height / 2.0f);
 
                 // TODO: Vertical centering is not working properly.
                 location.Y *= 0.8f;
 
                 var color = key.Color;
 
-                x.DrawText(
-                    new TextGraphicsOptions
-                    {
-                        WrapTextWidth = size.Width,
-                        HorizontalAlignment = key.Alignment == TextAlignment.Center
-                            ? HorizontalAlignment.Center
-                            : HorizontalAlignment.Left,
-                        VerticalAlignment = VerticalAlignment.Center
-                    },
-                    key.Text,
-                    actualFont,
-                    new Bgra32(
-                        (byte) (color.R * 255.0f),
-                        (byte) (color.G * 255.0f),
-                        (byte) (color.B * 255.0f),
-                        (byte) (color.A * 255.0f)),
-                    location);
+                // Clear image to transparent.
+                // TODO: Don't need to do this for a newly created image.
+                x.Clear(Color.Transparent);
+
+                try
+                {
+                    x.DrawText(
+                        new TextGraphicsOptions
+                        {
+                            GraphicsOptions = new GraphicsOptions
+                            {
+                                Antialias = true,
+                            },
+                            TextOptions = new TextOptions
+                            {
+                                WrapTextWidth = size.Width,
+                                HorizontalAlignment = key.Alignment == TextAlignment.Center
+                                ? HorizontalAlignment.Center
+                                : HorizontalAlignment.Left,
+                                VerticalAlignment = VerticalAlignment.Center
+                            }
+                        },
+                        key.Text,
+                        actualFont,
+                        new Bgra32(
+                            (byte) (color.R * 255.0f),
+                            (byte) (color.G * 255.0f),
+                            (byte) (color.B * 255.0f),
+                            (byte) (color.A * 255.0f)),
+                        location);
+                }
+                catch
+                {
+                    // TODO:
+                }
             });
 
             Texture texture;
 
             // Draw image to texture.
-            fixed (void* pin = &image.DangerousGetPinnableReferenceToPixelBuffer())
+            if (!image.TryGetSinglePixelSpan(out Span<Bgra32> pixelSpan))
+            {
+                throw new InvalidOperationException("Unable to get image pixelspan.");
+            }
+            fixed (void* pin = &MemoryMarshal.GetReference(pixelSpan))
             {
                 texture = _graphicsDevice.ResourceFactory.CreateTexture(
                     TextureDescription.Texture2D(

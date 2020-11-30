@@ -12,7 +12,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Parameters[0]);
+            context.Push(Parameters[0]);
         }
     }
 
@@ -26,7 +26,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            context.Push(Parameters[0]);
         }
     }
 
@@ -41,7 +41,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         public override void Execute(ActionContext context)
         {
             var id = Parameters[0].ToInteger();
-            context.Stack.Push(context.Scope.Constants[id]);
+            context.Push(context.Scope.Constants[id]);
         }
     }
 
@@ -55,7 +55,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Parameters[0]);
+            context.Push(Parameters[0]);
         }
     }
 
@@ -69,7 +69,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Parameters[0]);
+            context.Push(Parameters[0]);
         }
     }
 
@@ -92,7 +92,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
             {
                 result = context.GetParameter(str);
             }
-            else if(context.CheckLocal(str))
+            else if (context.CheckLocal(str))
             {
                 result = context.GetLocal(str);
             }
@@ -104,7 +104,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
             if (result == null)
                 throw new InvalidOperationException();
 
-            context.Stack.Push(result);
+            context.Push(result);
         }
     }
 
@@ -117,7 +117,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.Undefined());
+            context.Push(Value.Undefined());
         }
     }
 
@@ -130,7 +130,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromBoolean(false));
+            context.Push(Value.FromBoolean(false));
         }
     }
 
@@ -143,7 +143,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            context.Push(Value.FromObject(null));
         }
     }
 
@@ -156,7 +156,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromInteger(0));
+            context.Push(Value.FromInteger(0));
         }
     }
 
@@ -182,7 +182,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromObject(context.Scope));
+            context.Push(Value.FromObject(context.Scope));
         }
     }
 
@@ -195,7 +195,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromInteger(1));
+            context.Push(Value.FromInteger(1));
         }
     }
 
@@ -208,7 +208,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromBoolean(true));
+            context.Push(Value.FromBoolean(true));
         }
     }
 
@@ -224,7 +224,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
         {
             foreach (var constant in Parameters)
             {
-                context.Stack.Push(constant.ResolveConstant(context));
+                context.Push(constant.ResolveConstant(context));
             }
         }
     }
@@ -238,7 +238,9 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            // TODO: check if this is correct
+            var name = context.Pop();
+            context.Scope.Variables[name.ToString()] = Value.FromInteger(0);
         }
     }
 
@@ -251,7 +253,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Push(Value.FromObject(context.Global));
+            context.Push(Value.FromObject(context.Apt.Avm.ExternObject));
         }
     }
 
@@ -264,8 +266,39 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            var val = context.Stack.Peek();
-            context.Stack.Push(val);
+            var val = context.Peek();
+            context.Push(val);
+        }
+    }
+
+    /// <summary>
+    /// Push a register's value to the stack
+    /// </summary>
+    public sealed class PushRegister : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.EA_PushRegister;
+        public override uint Size => 1;
+
+        public override void Execute(ActionContext context)
+        {
+            context.Push(Parameters[0].ResolveRegister(context));
+        }
+    }
+
+    /// <summary>
+    /// (Just guessing) Similiar to PushConstantByte,
+    /// read a constant from the pool and push it to stack,
+    /// but it reads a Int16 instead of byte as constant index
+    /// </summary>
+    public sealed class PushConstantWord : InstructionBase
+    {
+        public override InstructionType Type => InstructionType.EA_PushConstantWord;
+        public override uint Size => 2;
+
+        public override void Execute(ActionContext context)
+        {
+            var id = Parameters[0].ToInteger();
+            context.Push(context.Scope.Constants[id]);
         }
     }
 
@@ -278,7 +311,7 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            context.Stack.Pop();
+            context.Pop();
         }
     }
 
@@ -291,7 +324,8 @@ namespace OpenSage.Gui.Apt.ActionScript.Opcodes
 
         public override void Execute(ActionContext context)
         {
-            throw new NotImplementedException();
+            var strVal = context.Pop().ToString();
+            context.Push(Value.FromInteger(int.Parse(strVal)));
         }
     }
 }

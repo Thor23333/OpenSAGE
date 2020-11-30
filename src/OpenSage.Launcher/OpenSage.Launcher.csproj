@@ -1,11 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
-    <RuntimeIdentifiers>win-x64;osx-64</RuntimeIdentifiers>
-    <LangVersion>latest</LangVersion>
+    <TargetFramework>net5.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;osx-x64;ubuntu-x64</RuntimeIdentifiers>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>Resources\app.manifest</ApplicationManifest>
   </PropertyGroup>
   
   <ItemGroup>
@@ -13,7 +13,7 @@
   </ItemGroup>
   
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" Version="0.1.0-preview2-180220-2" />
+    <PackageReference Include="CommandLineParser" Version="2.8.0" />
   </ItemGroup>
 
   <ItemGroup>

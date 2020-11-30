@@ -6,7 +6,7 @@ using SixLabors.Fonts;
 
 namespace OpenSage.Gui.Wnd.Controls
 {
-    public class Control : DisposableBase
+    public partial class Control : DisposableBase
     {
         public ControlCallback SystemCallback { get; set; }
         public ControlCallback InputCallback { get; set; }
@@ -70,9 +70,13 @@ namespace OpenSage.Gui.Wnd.Controls
             }
         }
 
-        // TODO: Exclude BorderWidth.
-        public Rectangle ClientRectangle => new Rectangle(0, 0, _bounds.Width, _bounds.Height);
-        public Size ClientSize => new Size(_bounds.Width, _bounds.Height);
+        public Rectangle ClientRectangle => new Rectangle(BorderWidth,
+                                                          BorderWidth,
+                                                          _bounds.Width- BorderWidth,
+                                                          _bounds.Height- BorderWidth);
+
+        public Size ClientSize => new Size(_bounds.Width - BorderWidth,
+                                           _bounds.Height - BorderWidth);
 
         public int Left
         {
@@ -112,7 +116,23 @@ namespace OpenSage.Gui.Wnd.Controls
 
         protected virtual void OnSizeChanged(in Size newSize) { }
 
-        public string Text { get; set; }
+        public delegate void OnTextChangedHandler(object sender, string Text);
+        public event OnTextChangedHandler OnTextChanged;
+
+        private string _text = string.Empty;
+
+        public string Text {
+            get {
+                return _text;
+            }
+            set {
+                if (value != _text)
+                {
+                    _text = value;
+                    OnTextChanged?.Invoke(this, value);
+                }
+            }
+        }
 
         public virtual Font Font { get; set; }
 
@@ -178,13 +198,32 @@ namespace OpenSage.Gui.Wnd.Controls
         public bool IsMouseOver { get; private set; }
         public bool IsMouseDown { get; private set; }
 
+        /// <summary>
+        /// Used to pass arbitrary data items between callbacks.
+        /// </summary>
+        public Dictionary<string, object> Data { get; } = new Dictionary<string, object>();
+
         public Control()
         {
             Controls = new ControlCollection(this);
 
-            SystemCallback = (control, message, context) => { };
+            SystemCallback = (control, message, context) => Parent?.SystemCallback(control, message, context);
             InputCallback = DefaultInput;
             DrawCallback = DefaultDraw;
+        }
+
+        public virtual Rectangle RectangleToWindow(in Rectangle rectangle)
+        {
+            var result = rectangle;
+
+            var parent = Parent;
+            while (parent != null)
+            {
+                result = result.WithLocation(new Point2D(result.X + Bounds.X, result.Y + Bounds.Y));
+                parent = parent.Parent;
+            }
+
+            return result;
         }
 
         public virtual Point2D PointToClient(in Point2D point)
@@ -193,8 +232,7 @@ namespace OpenSage.Gui.Wnd.Controls
             if (Parent != null)
             {
                 result = Parent.PointToClient(point);
-                result.X -= _bounds.X;
-                result.Y -= _bounds.Y;
+                result = new Point2D(result.X - _bounds.X, result.Y - _bounds.Y);
             }
             else
             {
@@ -204,7 +242,7 @@ namespace OpenSage.Gui.Wnd.Controls
             return result;
         }
 
-        public bool HitTest(in Point2D windowPoint)
+        public virtual bool HitTest(in Point2D windowPoint)
         {
             if (!Enabled || !Visible || Opacity != 1)
             {
@@ -247,7 +285,7 @@ namespace OpenSage.Gui.Wnd.Controls
                     return;
                 }
 
-                foreach (var child in control.Controls)
+                foreach (var child in control.Controls.AsList())
                 {
                     findRecursive(child);
                 }
@@ -255,7 +293,7 @@ namespace OpenSage.Gui.Wnd.Controls
                 result.Add(control);
             }
 
-            findRecursive(this);
+            findRecursive(this.Window ?? this);
 
             return result.ToArray();
         }
@@ -275,7 +313,7 @@ namespace OpenSage.Gui.Wnd.Controls
                 _needsLayout = false;
             }
 
-            foreach (var child in Controls)
+            foreach (var child in Controls.AsList())
             {
                 child.Layout();
             }
@@ -378,7 +416,7 @@ namespace OpenSage.Gui.Wnd.Controls
             }
 
             var overlayColor = OverlayColor.Value;
-            overlayColor.A *= Opacity;
+            overlayColor = overlayColor.WithA(overlayColor.A * TextOpacity);
 
             drawingContext.FillRectangle(
                 ClientRectangle,
@@ -408,7 +446,7 @@ namespace OpenSage.Gui.Wnd.Controls
                 color = HoverTextColor ?? color;
             }
 
-            color.A *= TextOpacity;
+            color = color.WithA(color.A * TextOpacity);
 
             drawingContext.DrawText(
                 Text,
@@ -436,6 +474,7 @@ namespace OpenSage.Gui.Wnd.Controls
                     break;
 
                 case WndWindowMessageType.MouseUp:
+                    CloseOpenComboboxes(this);
                     IsMouseDown = false;
                     break;
             }
@@ -447,7 +486,7 @@ namespace OpenSage.Gui.Wnd.Controls
 
         protected override void Dispose(bool disposeManagedResources)
         {
-            foreach (var child in Controls)
+            foreach (var child in Controls.AsList())
             {
                 child.ParentInternal = null;
                 child.Dispose();
@@ -455,6 +494,37 @@ namespace OpenSage.Gui.Wnd.Controls
             Controls.Clear();
 
             base.Dispose(disposeManagedResources);
+        }
+
+        public static IEnumerable<Control> GetSelfAndDescendants(Control baseControl, bool isRecursive = true)
+        {
+            yield return baseControl;
+
+            foreach (var child in baseControl.Controls.AsList())
+            {
+                if (isRecursive)
+                {
+                    foreach (var control in GetSelfAndDescendants(child))
+                    {
+                        yield return control;
+                    }
+                }
+                else
+                {
+                    yield return child;
+                }
+            }
+        }
+
+        //TODO: check if this can be made more efficient
+        private static void CloseOpenComboboxes(Control sender)
+        {
+            var openComboBoxes = GetSelfAndDescendants(sender.Window).OfType<ComboBox>().Where(i => i.IsDropDownOpen);
+            foreach (var openComboBox in openComboBoxes)
+            {
+                if (openComboBox != sender)
+                    openComboBox.IsDropDownOpen = false;
+            }
         }
     }
 

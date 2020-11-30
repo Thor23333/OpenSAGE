@@ -1,4 +1,6 @@
-﻿namespace OpenSage.Data.Ini
+﻿using OpenSage.Data.Ini;
+
+namespace OpenSage.Logic.Object
 {
     public enum ObjectKinds
     {
@@ -400,5 +402,398 @@
 
         [IniEnum("CREEP"), AddedIn(SageGame.Bfme)]
         Creep,
+
+        [IniEnum("PATH_THROUGH_EACH_OTHER"), AddedIn(SageGame.Bfme)]
+        PathThroughEachOther,
+
+        [IniEnum("THROWN_OBJECT"), AddedIn(SageGame.Bfme)]
+        ThrownObject,
+
+        [IniEnum("HOBBIT"), AddedIn(SageGame.Bfme)]
+        Hobbit,
+
+        [IniEnum("ROCK_VENDOR"), AddedIn(SageGame.Bfme)]
+        RockVendor,
+
+        [IniEnum("WORKING_PASSENGER"), AddedIn(SageGame.Bfme)]
+        WorkingPassenger,
+
+        [IniEnum("NO_FREEWILL_ENTER"), AddedIn(SageGame.Bfme)]
+        NoFreeWillEnter,
+
+        [IniEnum("ROCK"), AddedIn(SageGame.Bfme)]
+        Rock,
+
+        [IniEnum("CLUB"), AddedIn(SageGame.Bfme)]
+        Club,
+
+        [IniEnum("CAN_USE_SIEGE_TOWER"), AddedIn(SageGame.Bfme)]
+        CanUseSiegeTower,
+
+        [IniEnum("ARCHER"), AddedIn(SageGame.Bfme)]
+        Archer,
+
+        [IniEnum("PATH_THROUGH_INFANTRY"), AddedIn(SageGame.Bfme)]
+        PathThroughInfantry,
+
+        [IniEnum("NEED_BASE_FOUNDATION"), AddedIn(SageGame.Bfme)]
+        NeedBaseFoundation,
+
+        [IniEnum("GARRISON"), AddedIn(SageGame.Bfme)]
+        Garrison,
+
+        [IniEnum("CHUNK_VENDOR"), AddedIn(SageGame.Bfme)]
+        ChunkVendor,
+
+        [IniEnum("URUK"), AddedIn(SageGame.Bfme)]
+        Uruk,
+
+        [IniEnum("ARMY_SUMMARY"), AddedIn(SageGame.Bfme)]
+        ArmySummary,
+
+        [IniEnum("CASTLE_KEEP"), AddedIn(SageGame.Bfme)]
+        CastleKeep,
+
+        [IniEnum("MOVE_ONLY"), AddedIn(SageGame.Bfme)]
+        MoveOnly,
+
+        [IniEnum("HIDE_IF_FOGGED"), AddedIn(SageGame.Bfme)]
+        HideIfFogged,
+
+        [IniEnum("BASE_FOUNDATION"), AddedIn(SageGame.Bfme)]
+        BaseFoundation,
+
+        [IniEnum("CASTLE_CENTER"), AddedIn(SageGame.Bfme)]
+        CastleCenter,
+
+        [IniEnum("BASE_SITE"), AddedIn(SageGame.Bfme)]
+        BaseSite,
+
+        [IniEnum("CATAPULT_ROCK"), AddedIn(SageGame.Bfme)]
+        CatapultRock,
+
+        [IniEnum("GONDORTOWNSMAN"), AddedIn(SageGame.Bfme)]
+        GondorTownsman,
+
+        [IniEnum("GONDORTOWNSMANTORCH"), AddedIn(SageGame.Bfme)]
+        GondorTownsmanTorch,
+
+        [IniEnum("GONDORTOWNSWOMAN"), AddedIn(SageGame.Bfme)]
+        GondorTownsWoman,
+
+        [IniEnum("GONDORTOWNSPAIR"), AddedIn(SageGame.Bfme)]
+        GondorTownsPair,
+
+        [IniEnum("SUPPLY_GATHERING_CENTER"), AddedIn(SageGame.Bfme)]
+        SupplyGatheringCenter,
+
+        [IniEnum("FS_CASH_PRODUCER"), AddedIn(SageGame.Bfme)]
+        FSCashProducer,
+
+        [IniEnum("INDUSTRY_AFFECTED"), AddedIn(SageGame.Bfme)]
+        IndustryAffected,
+
+        [IniEnum("NONOCCLUDING"), AddedIn(SageGame.Bfme)]
+        NonOccluding,
+
+        [IniEnum("OPTIMIZED_PROP"), AddedIn(SageGame.Bfme)]
+        OptimizedProp,
+
+        [IniEnum("MELEE_HORDE"), AddedIn(SageGame.Bfme)]
+        MeleeHorde,
+
+        [IniEnum("ARMY_OF_DEAD"), AddedIn(SageGame.Bfme)]
+        ArmyOfDead,
+
+        [IniEnum("INERT_SHROUD_REVEALER"), AddedIn(SageGame.Bfme)]
+        InertShroudRevealer,
+
+        [IniEnum("MADE_OF_METAL"), AddedIn(SageGame.Bfme)]
+        MadeOfMetal,
+
+        [IniEnum("VITAL_FOR_BASE_SURVIVAL"), AddedIn(SageGame.Bfme)]
+        VitalForBaseSurvival,
+
+        [IniEnum("MADE_OF_WOOD"), AddedIn(SageGame.Bfme)]
+        MadeOfWood,
+
+        [IniEnum("DO_NOT_CLASSIFY"), AddedIn(SageGame.Bfme)]
+        DoNotClassify,
+
+        [IniEnum("FACE_AWAY_FROM_CASTLE_KEEP"), AddedIn(SageGame.Bfme)]
+        FaceAwayFromCastleKeep,
+
+        [IniEnum("MADE_OF_DIRT"), AddedIn(SageGame.Bfme)]
+        MadeOfDirt,
+
+        [IniEnum("TAINT"), AddedIn(SageGame.Bfme)]
+        Taint,
+
+        [IniEnum("MADE_OF_STONE"), AddedIn(SageGame.Bfme)]
+        MadeOfStone,
+
+        [IniEnum("BASE_DEFENSE_FOUNDATION"), AddedIn(SageGame.Bfme)]
+        BaseDefenseFoundation,
+
+        [IniEnum("BANNER"), AddedIn(SageGame.Bfme)]
+        Banner,
+
+        [IniEnum("DEFLECT_BY_SPECIAL_POWER"), AddedIn(SageGame.Bfme)]
+        DeflectBySpecialPower,
+
+        [IniEnum("OCL_BIT"), AddedIn(SageGame.Bfme)]
+        OCLBit,
+
+        [IniEnum("TAINTEFFECT"), AddedIn(SageGame.Bfme)]
+        TaintEffect,
+
+        [IniEnum("GRAB_AND_DROP"), AddedIn(SageGame.Bfme)]
+        GrabAndDrop,
+
+        [IniEnum("CAN_ATTACK_WALLS"), AddedIn(SageGame.Bfme)]
+        CanAttackWalls,
+
+        [IniEnum("CAN_RIDE_BATTERING_RAM"), AddedIn(SageGame.Bfme)]
+        CanRideBatteringRam,
+
+        [IniEnum("SIEGE_TOWER"), AddedIn(SageGame.Bfme)]
+        SiegeTower,
+
+        [IniEnum("SIEGE_LADDER"), AddedIn(SageGame.Bfme)]
+        SiegeLadder,
+
+        [IniEnum("CAN_RIDE_SIEGE_LADDER"), AddedIn(SageGame.Bfme)]
+        CanRideSiegeLadder,
+
+        [IniEnum("DEPLOYED_MINE"), AddedIn(SageGame.Bfme)]
+        DeployedMine,
+
+        [IniEnum("MINE_TRIGGER"), AddedIn(SageGame.Bfme)]
+        MineTrigger,
+
+        [IniEnum("HAS_HEALTH_BAR"), AddedIn(SageGame.Bfme)]
+        HasHealthBar,
+
+        [IniEnum("NOTIFY_OF_PREATTACK"), AddedIn(SageGame.Bfme)]
+        NotifyOfPreattack,
+
+        [IniEnum("ORC"), AddedIn(SageGame.Bfme)]
+        Orc,
+
+        [IniEnum("PORTER"), AddedIn(SageGame.Bfme)]
+        Porter,
+
+        [IniEnum("SCARY"), AddedIn(SageGame.Bfme)]
+        Scary,
+
+        [IniEnum("BIG_MONSTER"), AddedIn(SageGame.Bfme)]
+        BigMonster,
+
+        [IniEnum("SWARM_DOZER"), AddedIn(SageGame.Bfme)]
+        SwarmDozer,
+
+        [IniEnum("MOVE_FOR_NOONE"), AddedIn(SageGame.Bfme)]
+        MoveForNoOne,
+
+        [IniEnum("TROLL"), AddedIn(SageGame.Bfme)]
+        Troll,
+
+        [IniEnum("TREE"), AddedIn(SageGame.Bfme)]
+        Tree,
+
+        [IniEnum("WEBBED"), AddedIn(SageGame.Bfme)]
+        Webbed,
+
+        [IniEnum("IGNORE_FOR_EVA_SPEECH_POSITION"), AddedIn(SageGame.Bfme)]
+        IgnoreForEvaSpeechPosition,
+
+        [IniEnum("DO_NOT_PICK_ME_WHEN_BUILDING"), AddedIn(SageGame.Bfme)]
+        DoNotPickMeWhenBuilding,
+
+        [IniEnum("COMBO_HORDE"), AddedIn(SageGame.Bfme)]
+        ComboHorde,
+
+        [IniEnum("SUMMONED"), AddedIn(SageGame.Bfme)]
+        Summoned,
+
+        [IniEnum("NO_FORMATION_MOVEMENT"), AddedIn(SageGame.Bfme)]
+        NoFormationMovement,
+
+        [IniEnum("ARAGORN"), AddedIn(SageGame.Bfme)]
+        Aragorn,
+
+        [IniEnum("GANDALF"), AddedIn(SageGame.Bfme)]
+        Gandalf,
+
+        [IniEnum("GIMLI"), AddedIn(SageGame.Bfme)]
+        Gimli,
+
+        [IniEnum("BUILD_FOR_FREE"), AddedIn(SageGame.Bfme)]
+        BuildForFree,
+
+        [IniEnum("SHRUB"), AddedIn(SageGame.Bfme)]
+        Shrub,
+
+        [IniEnum("NO_BASE_CAPTURE"), AddedIn(SageGame.Bfme)]
+        NoBaseCapture,
+
+        [IniEnum("CRITTER_EMITTER"), AddedIn(SageGame.Bfme)]
+        CritterEmitter,
+
+        [IniEnum("SALT_LICK"), AddedIn(SageGame.Bfme)]
+        SaltLick,
+
+        [IniEnum("ALWAYS_SHOW_HOUSE_COLOR"), AddedIn(SageGame.Bfme)]
+        AlwaysShowHouseColor,
+
+        [IniEnum("BUFF"), AddedIn(SageGame.Bfme)]
+        Buff,
+
+        [IniEnum("SPELL_BOOK"), AddedIn(SageGame.Bfme)]
+        SpellBook,
+
+        [IniEnum("NEVER_CULL_FOR_MP"), AddedIn(SageGame.Bfme2)]
+        NeverCullForMP,
+
+        [IniEnum("SCALEABLE_WALL"), AddedIn(SageGame.Bfme2)]
+        ScaleableWall,
+
+        [IniEnum("DONT_HIDE_IF_FOGGED"), AddedIn(SageGame.Bfme2)]
+        DontHideIfFogged,
+
+        [IniEnum("WALL_GATE"), AddedIn(SageGame.Bfme2)]
+        WallGate,
+
+        [IniEnum("DOZER_FACTORY"), AddedIn(SageGame.Bfme2)]
+        DozerFactory,
+
+        [IniEnum("WB_DISPLAY_SCRIPT_NAME"), AddedIn(SageGame.Bfme2)]
+        WbDisplayScriptName,
+
+        [IniEnum("OPTIMIZED_SOUND"), AddedIn(SageGame.Bfme2)]
+        OptimizedSound,
+
+        [IniEnum("BATTLE_TOWER"), AddedIn(SageGame.Bfme2)]
+        BattleTower,
+
+        [IniEnum("WALL"), AddedIn(SageGame.Bfme2)]
+        Wall,
+
+        [IniEnum("LINKED_TO_FLAG"), AddedIn(SageGame.Bfme2)]
+        LinkedToFlag,
+
+        [IniEnum("CREATE_A_HERO"), AddedIn(SageGame.Bfme2)]
+        CreateAHero,
+
+        [IniEnum("CAN_CLIMB_WALLS"), AddedIn(SageGame.Bfme2)]
+        CanClimbWalls,
+
+        [IniEnum("PASS_EXPERIENCE_TO_PRODUCER"), AddedIn(SageGame.Bfme2)]
+        PassExperienceToProducer,
+
+        [IniEnum("LARGE_RECTANGLE_PATHFIND"), AddedIn(SageGame.Bfme2)]
+        LargeRectanglePathfind,
+
+        [IniEnum("PIKEMAN"), AddedIn(SageGame.Bfme2)]
+        Pikeman,
+
+        [IniEnum("PIKE"), AddedIn(SageGame.Bfme2)]
+        Pike,
+
+        [IniEnum("LIVING_WORLD_BUILDING_MIRROR"), AddedIn(SageGame.Bfme2)]
+        LivingWorldBuildingMirror,
+
+        [IniEnum("CAN_SHOOT_OVER_WALLS"), AddedIn(SageGame.Bfme2)]
+        CanShootOverWalls,
+
+        [IniEnum("EXPANSION_PAD"), AddedIn(SageGame.Bfme2)]
+        ExpansionPad,
+
+        [IniEnum("PORT"), AddedIn(SageGame.Bfme2)]
+        Port,
+
+        [IniEnum("HEAVY_MELEE_HITTER"), AddedIn(SageGame.Bfme2)]
+        HeavyMeleeHitter,
+
+        [IniEnum("SHIP"), AddedIn(SageGame.Bfme2)]
+        Ship,
+
+        [IniEnum("PASS_EXPERIENCE_TO_CONTAINER"), AddedIn(SageGame.Bfme2)]
+        PassExperienceToContainer,
+
+        [IniEnum("SHIP_BATTLESHIP"), AddedIn(SageGame.Bfme2)]
+        ShipBattleship,
+
+        [IniEnum("SHIP_BOMBARD"), AddedIn(SageGame.Bfme2)]
+        ShipBombard,
+
+        [IniEnum("SHIP_SUICIDE"), AddedIn(SageGame.Bfme2)]
+        ShipSuicide,
+
+        [IniEnum("MUMAKIL_BUFF_NUGGET"), AddedIn(SageGame.Bfme2)]
+        MumakilBuffNugget,
+
+        [IniEnum("SIEGEWEAPON"), AddedIn(SageGame.Bfme2)]
+        Siegeweapon,
+
+        [IniEnum("AMPHIBIOUS"), AddedIn(SageGame.Bfme2)]
+        Amphibious,
+
+        [IniEnum("TROLL_BUFF_NUGGET"), AddedIn(SageGame.Bfme2)]
+        TrollBuffNugget,
+
+        [IniEnum("GIANT_BIRD"), AddedIn(SageGame.Bfme2)]
+        GiantBird,
+
+        [IniEnum("NONCOM"), AddedIn(SageGame.Bfme2)]
+        Noncom,
+
+        [IniEnum("DONT_USE_CANCEL_BUILD_BUTTON"), AddedIn(SageGame.Bfme2)]
+        DontUseCancelBuildButton,
+
+        [IniEnum("SKYBOX"), AddedIn(SageGame.Bfme2)]
+        Skybox,
+
+        [IniEnum("CAPTUREFLAG"), AddedIn(SageGame.Bfme2)]
+        Captureflag,
+
+        [IniEnum("NOT_SELLABLE"), AddedIn(SageGame.Bfme2)]
+        NotSelectable,
+
+        [IniEnum("CREEP_STRUCTURE"), AddedIn(SageGame.Bfme2)]
+        CreepStructure,
+
+        [IniEnum("NEUTRALGOLLUM"), AddedIn(SageGame.Bfme2)]
+        NeutralGollum,
+
+        [IniEnum("ORIENTS_TO_CAMERA"), AddedIn(SageGame.Bfme2)]
+        OrientsToCamera,
+
+        [IniEnum("THREAT_FINDER"), AddedIn(SageGame.Bfme2)]
+        ThreatFinder,
+
+        [IniEnum("ONE_RING"), AddedIn(SageGame.Bfme2)]
+        OneRing,
+
+        [IniEnum("GONDORARAGORNMP"), AddedIn(SageGame.Bfme2)]
+        GondorAragornMp,
+
+        [IniEnum("GONDORGANDALF"), AddedIn(SageGame.Bfme2)]
+        GondorGandalf,
+
+        [IniEnum("SUPPORT"), AddedIn(SageGame.Bfme2Rotwk)]
+        Support,
+
+        [IniEnum("HORDE_MONSTER"), AddedIn(SageGame.Bfme2Rotwk)]
+        HordeMonster,
+
+        [IniEnum("SIEGEENGINE"), AddedIn(SageGame.Bfme2Rotwk)]
+        Siegeengine,
+
+        [IniEnum("OATHBREAKER"), AddedIn(SageGame.Bfme2)]
+        Oathbreaker,
+
+        [IniEnum("SHIP_TRANSPORT"), AddedIn(SageGame.Bfme2)]
+        ShipTransport,
     }
 }

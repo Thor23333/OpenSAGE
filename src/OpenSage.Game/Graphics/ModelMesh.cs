@@ -1,9 +1,10 @@
-﻿using System.Numerics;
+﻿using System.Collections.Generic;
+using System.Numerics;
+using OpenSage.Content.Loaders;
 using OpenSage.Graphics.Cameras;
-using OpenSage.Graphics.Effects;
 using OpenSage.Graphics.Rendering;
+using OpenSage.Graphics.Shaders;
 using OpenSage.Mathematics;
-using OpenSage.Utilities.Extensions;
 using Veldrid;
 
 namespace OpenSage.Graphics
@@ -18,114 +19,114 @@ namespace OpenSage.Graphics
     ///     - MeshParts[]: One for each unique PipelineState in a material pass.
     ///                    StartIndex, IndexCount, PipelineState, AlphaTest, Texturing
     /// </summary>
-    public sealed class ModelMesh : DisposableBase
+    public sealed partial class ModelMesh : BaseAsset
     {
-        internal const int MaxBones = 100;
+        private readonly ShaderSet _shaderSet;
+        private ShaderSet _depthShaderSet;
+
+        private readonly Pipeline _depthPipeline;
 
         private readonly DeviceBuffer _vertexBuffer;
         private readonly DeviceBuffer _indexBuffer;
 
-        private readonly ConstantBuffer<MeshMaterial.MeshConstants> _meshConstantsBuffer;
+        private readonly ResourceSet _meshConstantsResourceSet;
 
-        private readonly Effect _effect;
+        private ResourceSet _samplerResourceSet;
 
-        public string Name { get; }
+        internal BeforeRenderDelegate[] BeforeRenderDelegates { get; private set; }
+        internal BeforeRenderDelegate[] BeforeRenderDelegatesDepth { get; private set; }
 
-        public ModelBone ParentBone { get; }
-        public uint NumBones { get; }
+        public readonly BoundingBox BoundingBox;
 
-        public BoundingBox BoundingBox { get; }
+        public readonly List<ModelMeshPart> MeshParts;
 
-        public ModelMeshMaterialPass[] MaterialPasses { get; }
+        public readonly bool Skinned;
 
-        public bool Skinned { get; }
+        public readonly bool Hidden;
+        public readonly bool CameraOriented;
 
-        public bool Hidden { get; }
-        public bool CameraOriented { get; }
-
-        internal ModelMesh(
-            GraphicsDevice graphicsDevice,
-            string name,
-            MeshVertex.Basic[] vertices,
-            ushort[] indices,
-            Effect effect,
-            ModelMeshMaterialPass[] materialPasses,
-            bool isSkinned,
-            ModelBone parentBone,
-            uint numBones,
-            BoundingBox boundingBox,
-            bool hidden,
-            bool cameraOriented)
+        private void PostInitialize(AssetLoadContext loadContext)
         {
-            Name = name;
+            _samplerResourceSet = loadContext.ShaderResources.Mesh.SamplerResourceSet;
+            _depthShaderSet = loadContext.ShaderResources.MeshDepth.ShaderSet;
 
-            ParentBone = parentBone;
-            NumBones = numBones;
+            BeforeRenderDelegates = new BeforeRenderDelegate[MeshParts.Count];
+            BeforeRenderDelegatesDepth = new BeforeRenderDelegate[MeshParts.Count];
 
-            BoundingBox = boundingBox;
-
-            Skinned = isSkinned;
-
-            Hidden = hidden;
-            CameraOriented = cameraOriented;
-
-            _effect = effect;
-
-            _vertexBuffer = AddDisposable(graphicsDevice.CreateStaticBuffer(
-                vertices,
-                BufferUsage.VertexBuffer));
-
-            _indexBuffer = AddDisposable(graphicsDevice.CreateStaticBuffer(
-                indices,
-                BufferUsage.IndexBuffer));
-
-            var commandEncoder = graphicsDevice.ResourceFactory.CreateCommandList();
-
-            commandEncoder.Begin();
-
-            _meshConstantsBuffer = AddDisposable(new ConstantBuffer<MeshMaterial.MeshConstants>(graphicsDevice));
-            _meshConstantsBuffer.Value.SkinningEnabled = isSkinned;
-            _meshConstantsBuffer.Value.NumBones = numBones;
-            _meshConstantsBuffer.Update(commandEncoder);
-
-            commandEncoder.End();
-
-            graphicsDevice.SubmitCommands(commandEncoder);
-
-            graphicsDevice.DisposeWhenIdle(commandEncoder);
-
-            foreach (var materialPass in materialPasses)
+            for (var i = 0; i < BeforeRenderDelegates.Length; i++)
             {
-                AddDisposable(materialPass);
+                var meshPart = MeshParts[i];
 
-                foreach (var meshPart in materialPass.MeshParts)
+                BeforeRenderDelegates[i] = (cl, context) =>
                 {
-                    AddDisposable(meshPart.Material);
-                    meshPart.Material.SetMeshConstants(_meshConstantsBuffer.Buffer);
-                }
+                    cl.SetGraphicsResourceSet(4, _meshConstantsResourceSet);
+                    cl.SetGraphicsResourceSet(5, meshPart.MaterialResourceSet);
+                    cl.SetGraphicsResourceSet(6, _samplerResourceSet);
+
+                    cl.SetVertexBuffer(0, _vertexBuffer);
+
+                    if (meshPart.TexCoordVertexBuffer != null)
+                    {
+                        cl.SetVertexBuffer(1, meshPart.TexCoordVertexBuffer);
+                    }
+                };
+
+                BeforeRenderDelegatesDepth[i] = (cl, context) =>
+                {
+                    cl.SetGraphicsResourceSet(1, _meshConstantsResourceSet);
+
+                    cl.SetVertexBuffer(0, _vertexBuffer);
+
+                    if (meshPart.TexCoordVertexBuffer != null)
+                    {
+                        cl.SetVertexBuffer(1, meshPart.TexCoordVertexBuffer);
+                    }
+                };
             }
-            MaterialPasses = materialPasses;
         }
 
         internal void BuildRenderList(
             RenderList renderList,
-            CameraComponent camera,
+            Camera camera,
             ModelInstance modelInstance,
-            in Matrix4x4 modelTransform)
+            BeforeRenderDelegate[] beforeRender,
+            BeforeRenderDelegate[] beforeRenderDepth,
+            ModelBone parentBone,
+            in Matrix4x4 modelTransform,
+            bool castsShadow,
+            MeshShaderResources.RenderItemConstantsPS? renderItemConstantsPS)
         {
-            if (Hidden)
-            {
-                return;
-            }
-
-            if (!modelInstance.BoneVisibilities[ParentBone.Index])
-            {
-                return;
-            }
-
             var meshWorldMatrix = Skinned
                 ? modelTransform
-                : modelInstance.AbsoluteBoneTransforms[ParentBone.Index];
+                : modelInstance.AbsoluteBoneTransforms[parentBone.Index];
+
+            BuildRenderListWithWorldMatrix(
+                renderList,
+                camera,
+                modelInstance,
+                beforeRender,
+                beforeRenderDepth,
+                parentBone,
+                meshWorldMatrix,
+                castsShadow,
+                renderItemConstantsPS);
+        }
+
+        internal void BuildRenderListWithWorldMatrix(
+            RenderList renderList,
+            Camera camera,
+            ModelInstance modelInstance,
+            BeforeRenderDelegate[] beforeRender,
+            BeforeRenderDelegate[] beforeRenderDepth,
+            ModelBone parentBone,
+            in Matrix4x4 meshWorldMatrix,
+            bool castsShadow,
+            MeshShaderResources.RenderItemConstantsPS? renderItemConstantsPS = null)
+        {
+            if (Hidden || !modelInstance.BoneFrameVisibilities[parentBone.Index])
+            {
+                return;
+            }
 
             Matrix4x4 world;
             if (CameraOriented)
@@ -155,29 +156,49 @@ namespace OpenSage.Graphics
                 world = meshWorldMatrix;
             }
 
-            var meshBoundingBox = BoundingBox.Transform(world); // TODO: Not right for skinned meshes
+            var meshBoundingBox = BoundingBox.Transform(BoundingBox, world); // TODO: Not right for skinned meshes
 
-            foreach (var materialPass in MaterialPasses)
+            for (var i = 0; i < MeshParts.Count; i++)
             {
-                foreach (var meshPart in materialPass.MeshParts)
+                var meshPart = MeshParts[i];
+
+                var forceBlendEnabled = renderItemConstantsPS != null && renderItemConstantsPS.Value.Opacity < 1.0f;
+                var blendEnabled = meshPart.BlendEnabled || forceBlendEnabled;
+
+                // Depth pass
+
+                // TODO: With more work, we could draw shadows for translucent and alpha-tested materials.
+                if (!blendEnabled && castsShadow)
                 {
-                    meshPart.Material.SetSkinningBuffer(modelInstance.SkinningBuffer);
-
-                    var renderQueue = meshPart.Material.PipelineState.BlendState.AttachmentStates[0].BlendEnabled
-                        ? renderList.Transparent
-                        : renderList.Opaque;
-
-                    renderQueue.AddRenderItemDrawIndexed(
-                        meshPart.Material,
-                        _vertexBuffer,
-                        materialPass.TexCoordVertexBuffer,
-                        CullFlags.None,
+                    renderList.Shadow.RenderItems.Add(new RenderItem(
+                        Name,
+                        _depthShaderSet,
+                        _depthPipeline,
                         meshBoundingBox,
                         world,
                         meshPart.StartIndex,
                         meshPart.IndexCount,
-                        _indexBuffer);
+                        _indexBuffer,
+                        beforeRenderDepth[i]));
                 }
+
+                // Standard pass
+
+                var renderQueue = blendEnabled
+                    ? renderList.Transparent
+                    : renderList.Opaque;
+
+                renderQueue.RenderItems.Add(new RenderItem(
+                    Name,
+                    _shaderSet,
+                    forceBlendEnabled ? meshPart.PipelineBlend : meshPart.Pipeline,
+                    meshBoundingBox,
+                    world,
+                    meshPart.StartIndex,
+                    meshPart.IndexCount,
+                    _indexBuffer,
+                    beforeRender[i],
+                    renderItemConstantsPS));
             }
         }
     }

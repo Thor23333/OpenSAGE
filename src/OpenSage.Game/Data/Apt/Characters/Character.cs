@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using OpenSage.Data.Utilities.Extensions;
+using OpenSage.FileFormats;
 
 namespace OpenSage.Data.Apt.Characters
 {
@@ -86,7 +87,7 @@ namespace OpenSage.Data.Apt.Characters
                     throw new NotImplementedException();
             }
 
-            if(character!=null)
+            if (character != null)
                 character.Container = container;
 
             return character;

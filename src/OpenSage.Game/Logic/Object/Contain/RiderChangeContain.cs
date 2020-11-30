@@ -1,5 +1,5 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
+using OpenSage.Mathematics;
 
 namespace OpenSage.Logic.Object
 {
@@ -21,6 +21,11 @@ namespace OpenSage.Logic.Object
 
                 { "ScuttleDelay", (parser, x) => x.ScuttleDelay = parser.ParseInteger() },
                 { "ScuttleStatus", (parser, x) => x.ScuttleStatus = parser.ParseEnum<ObjectStatus>() },
+                { "KillRiderWhenVehicleDies", (parser, x) => x.KillRiderWhenVehicleDies = parser.ParseBoolean() },
+                { "ObjectStatusOfCrew", (parser, x) => x.ObjectStatusOfCrew = parser.ParseEnumBitArray<ObjectStatus>() },
+                { "InitialCrew", (parser, x) => x.InitialCrew = Crew.Parse(parser) },
+                { "CrewFilter", (parser, x) => x.CrewFilter = ObjectFilter.Parse(parser) },
+                { "CrewMax", (parser, x) => x.CrewMax = parser.ParseInteger() },
             });
 
         public RiderChangeRider Rider1 { get; private set; }
@@ -33,6 +38,21 @@ namespace OpenSage.Logic.Object
 
         public int ScuttleDelay { get; private set; }
         public ObjectStatus ScuttleStatus { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public bool KillRiderWhenVehicleDies { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public BitArray<ObjectStatus> ObjectStatusOfCrew { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public Crew InitialCrew { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public ObjectFilter CrewFilter { get; private set; }
+
+        [AddedIn(SageGame.Bfme)]
+        public int CrewMax { get; private set; }
     }
 
     public sealed class RiderChangeRider
@@ -46,7 +66,7 @@ namespace OpenSage.Logic.Object
                 WeaponCondition = parser.ParseEnum<WeaponSetConditions>(),
                 ObjectStatus = parser.ParseEnum<ObjectStatus>(),
                 CommandSet = parser.ParseAssetReference(),
-                LocomotorSet = parser.ParseEnum<LocomotorSet>()
+                LocomotorSet = parser.ParseEnum<LocomotorSetType>()
             };
         }
 
@@ -55,6 +75,6 @@ namespace OpenSage.Logic.Object
         public WeaponSetConditions WeaponCondition { get; private set; }
         public ObjectStatus ObjectStatus { get; private set; }
         public string CommandSet { get; private set; }
-        public LocomotorSet LocomotorSet { get; private set; }
+        public LocomotorSetType LocomotorSet { get; private set; }
     }
 }

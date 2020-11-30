@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using OpenSage.Content.Translation;
 using OpenSage.Gui;
 using OpenSage.Gui.Wnd;
 using OpenSage.Gui.Wnd.Controls;
@@ -9,6 +10,9 @@ namespace OpenSage.Mods.Generals.Gui
     public static class MainMenuCallbacks
     {
         private static bool _doneMainMenuFadeIn;
+
+        private static string _currentSide;
+        private static string _currentSideWindowSuffix;
 
         public static void W3DMainMenuInit(Window window, Game game)
         {
@@ -36,7 +40,7 @@ namespace OpenSage.Mods.Generals.Gui
                 var control = window.Controls.FindControl(controlName);
                 control.Opacity = 0;
 
-                foreach (var button in control.Controls.First().Controls)
+                foreach (var button in control.Controls.First().Controls.ToList())
                 {
                     button.Opacity = 0;
                     button.TextOpacity = 0;
@@ -64,6 +68,23 @@ namespace OpenSage.Mods.Generals.Gui
                 context.WindowManager.TransitionManager.QueueTransition(null, control.Window, transition);
             }
 
+            void OpenSinglePlayerSideMenu(string side, string sideWindowSuffix)
+            {
+                _currentSide = side;
+                _currentSideWindowSuffix = sideWindowSuffix;
+
+                var selectDifficultyLabel = (Label) control.Window.Controls.FindControl("MainMenu.wnd:StaticTextSelectDifficulty");
+                // TODO: This should be animated as part of the transition.
+                selectDifficultyLabel.Opacity = 1;
+                selectDifficultyLabel.TextOpacity = 1;
+                selectDifficultyLabel.Show();
+
+                QueueTransition("MainMenuSinglePlayerMenuBack");
+                QueueTransition($"MainMenuDifficultyMenu{sideWindowSuffix}");
+            }
+
+            var translation = context.Game.ContentManager.TranslationManager;
+
             switch (message.MessageType)
             {
                 case WndWindowMessageType.SelectedButton:
@@ -72,6 +93,33 @@ namespace OpenSage.Mods.Generals.Gui
                         case "MainMenu.wnd:ButtonSinglePlayer":
                             QueueTransition("MainMenuDefaultMenuBack");
                             QueueTransition("MainMenuSinglePlayerMenu");
+                            break;
+
+                        case "MainMenu.wnd:ButtonTRAINING":
+                            OpenSinglePlayerSideMenu("TRAINING", "Training");
+                            break;
+
+                        case "MainMenu.wnd:ButtonChina":
+                            OpenSinglePlayerSideMenu("China", "China");
+                            break;
+
+                        case "MainMenu.wnd:ButtonGLA":
+                            OpenSinglePlayerSideMenu("GLA", "GLA");
+                            break;
+
+                        case "MainMenu.wnd:ButtonUSA":
+                            OpenSinglePlayerSideMenu("USA", "US");
+                            break;
+
+                        case "MainMenu.wnd:ButtonEasy":
+                        case "MainMenu.wnd:ButtonMedium":
+                        case "MainMenu.wnd:ButtonHard":
+                            context.Game.StartCampaign(_currentSide);
+                            break;
+
+                        case "MainMenu.wnd:ButtonDiffBack":
+                            QueueTransition($"MainMenuDifficultyMenu{_currentSideWindowSuffix}Back");
+                            QueueTransition($"MainMenuSinglePlayer{_currentSideWindowSuffix}MenuFromDiff");
                             break;
 
                         case "MainMenu.wnd:ButtonSkirmish":
@@ -86,6 +134,10 @@ namespace OpenSage.Mods.Generals.Gui
                         case "MainMenu.wnd:ButtonMultiplayer":
                             QueueTransition("MainMenuDefaultMenuBack");
                             QueueTransition("MainMenuMultiPlayerMenu");
+                            break;
+
+                        case "MainMenu.wnd:ButtonNetwork":
+                            context.WindowManager.SetWindow(@"Menus\LanLobbyMenu.wnd");
                             break;
 
                         case "MainMenu.wnd:ButtonMultiBack":
@@ -107,6 +159,10 @@ namespace OpenSage.Mods.Generals.Gui
                             context.WindowManager.SetWindow(@"Menus\ReplayMenu.wnd");
                             break;
 
+                        case "MainMenu.wnd:ButtonLoadGame":
+                            context.WindowManager.SetWindow(@"Menus\SaveLoad.wnd");
+                            break;
+
                         case "MainMenu.wnd:ButtonOptions":
                             context.WindowManager.PushWindow(@"Menus\OptionsMenu.wnd");
                             break;
@@ -117,13 +173,13 @@ namespace OpenSage.Mods.Generals.Gui
 
                         case "MainMenu.wnd:ButtonExit":
                             var exitWindow = context.WindowManager.PushWindow(@"Menus\QuitMessageBox.wnd");
-                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:StaticTextTitle").Text = "EXIT?";
+                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:StaticTextTitle").Text = "GUI:QuitPopupTitle".Translate();
                             ((Label) exitWindow.Controls.FindControl("QuitMessageBox.wnd:StaticTextTitle")).TextAlignment = TextAlignment.Leading;
-                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:StaticTextMessage").Text = "Are you sure you want to exit?";
+                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:StaticTextMessage").Text = "GUI:QuitPopupMessage".Translate();
                             exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonOk").Show();
-                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonOk").Text = "YES";
+                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonOk").Text = "GUI:Yes".Translate();
                             exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonCancel").Show();
-                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonCancel").Text = "NO";
+                            exitWindow.Controls.FindControl("QuitMessageBox.wnd:ButtonCancel").Text = "GUI:No".Translate();
                             break;
                     }
                     break;

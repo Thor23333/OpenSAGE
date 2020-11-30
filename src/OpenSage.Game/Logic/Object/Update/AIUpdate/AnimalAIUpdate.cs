@@ -1,0 +1,44 @@
+﻿using OpenSage.Data.Ini;
+using OpenSage.Mathematics;
+
+namespace OpenSage.Logic.Object
+{
+    [AddedIn(SageGame.Bfme)]
+    public class AnimalAIUpdate : AIUpdate
+    {
+        private readonly AnimalAIUpdateModuleData _moduleData;
+
+        internal AnimalAIUpdate(GameObject gameObject, AnimalAIUpdateModuleData moduleData) : base(gameObject, moduleData)
+        {
+            _moduleData = moduleData;
+        }
+    }
+
+
+    public sealed class AnimalAIUpdateModuleData : AIUpdateModuleData
+    {
+        internal new static AnimalAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+
+        private new static readonly IniParseTable<AnimalAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
+            .Concat(new IniParseTable<AnimalAIUpdateModuleData>
+            {
+                { "FleeRange", (parser, x) => x.FleeRange = parser.ParseInteger() },
+                { "FleeDistance", (parser, x) => x.FleeDistance = parser.ParseInteger() },
+                { "WanderPercentage", (parser, x) => x.WanderPercentage = parser.ParsePercentage() },
+                { "MaxWanderDistance", (parser, x) => x.MaxWanderDistance = parser.ParseInteger() },
+                { "MaxWanderRadius", (parser, x) => x.MaxWanderRadius = parser.ParseInteger() },
+                { "UpdateTimer", (parser, x) => x.UpdateTimer = parser.ParseInteger() },
+                { "AfraidOfCastles", (parser, x) => x.AfraidOfCastles = parser.ParseBoolean() }
+            });
+
+        public int FleeRange { get; private set; }
+        public int FleeDistance { get; private set; }
+        public Percentage WanderPercentage { get; private set; }
+        public int MaxWanderDistance { get; private set; }
+        public int MaxWanderRadius { get; private set; }
+        public int UpdateTimer { get; private set; }
+        public bool AfraidOfCastles { get; private set; }
+
+        internal override AIUpdate CreateAIUpdate(GameObject gameObject) => new AnimalAIUpdate(gameObject, this);
+    }
+}

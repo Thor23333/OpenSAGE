@@ -8,34 +8,33 @@ namespace OpenSage.Gui.Apt
 {
     public sealed class AptContext
     {
-        private ContentManager _contentManager;
-        private ImageMap _imageMap;
-        private string _movieName;
-        private VM _avm;
-    
-        public VM AVM => _avm;
-        public ContentManager ContentManager => _contentManager;
-        public ConstantData Constants { get; set; }
+        private readonly AssetStore _assetStore;
+        private readonly ImageMap _imageMap;
+        private readonly string _movieName;
+
+        public VM Avm { get; }
+
+        public AptWindow Window { get; }
+        public ConstantData Constants => Window.AptFile.Constants;
         //Time per frame in milliseconds
-        public uint MillisecondsPerFrame { get; set; }
+        public uint MillisecondsPerFrame => Window.AptFile.Movie.MillisecondsPerFrame;
         public SpriteItem Root { get; set; }
 
-        public AptContext(AptFile apt, ContentManager contentManager)
+        public AptContext(AptWindow window)
         {
-            MillisecondsPerFrame = apt.Movie.MillisecondsPerFrame;
-            Constants = apt.Constants;
+            Window = window;
+            _assetStore = window.AssetStore;
 
-            _contentManager = contentManager;
-            _avm = new VM();
+            Avm = new VM();
         }
 
         //constructor to be used without an apt file
-        public AptContext(ImageMap imageMap, string movieName, ContentManager contentManager)
+        internal AptContext(ImageMap imageMap, string movieName, AssetStore assetStore)
         {
-            _contentManager = contentManager;
+            _assetStore = assetStore;
             _imageMap = imageMap;
             _movieName = movieName;
-            _avm = new VM();
+            Avm = new VM();
         }
 
         //need this to handle import/export correctly
@@ -60,9 +59,8 @@ namespace OpenSage.Gui.Apt
             //TODO: properly implement rectangle assignment
             var texId = aptFile.ImageMap.Mapping[id].TextureId;
             var movieName = aptFile.MovieName;
-            var texturePath = "art/Textures/apt_" + movieName + "_" + texId.ToString() + ".tga";
-            var loadOptions = new TextureLoadOptions() { GenerateMipMaps = false };
-            return _contentManager.Load<Texture>(texturePath, loadOptions);
+            var textureFileName = "apt_" + movieName + "_" + texId.ToString() + ".tga";
+            return _assetStore.GuiTextures.GetByName(textureFileName);
         }
 
         public Texture GetTexture(int id, Geometry geom)
@@ -82,9 +80,8 @@ namespace OpenSage.Gui.Apt
             }
 
             var texId = map.Mapping[id].TextureId;
-            var texturePath = "art/Textures/apt_" + movieName + "_" + texId.ToString() + ".tga";
-            var loadOptions = new TextureLoadOptions() { GenerateMipMaps = false };
-            return _contentManager.Load<Texture>(texturePath, loadOptions);
+            var textureFileName = "apt_" + movieName + "_" + texId.ToString() + ".tga";
+            return _assetStore.GuiTextures.GetByName(textureFileName);
         }
     }
 }

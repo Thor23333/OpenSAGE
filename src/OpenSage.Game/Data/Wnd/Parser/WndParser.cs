@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using OpenSage.Content;
+using OpenSage.Gui;
 using OpenSage.Mathematics;
 
 namespace OpenSage.Data.Wnd.Parser
@@ -8,10 +10,13 @@ namespace OpenSage.Data.Wnd.Parser
     internal sealed class WndParser
     {
         private readonly List<WndToken> _tokens;
+        private readonly AssetStore _assetStore;
         private int _tokenIndex;
 
-        public WndParser(string source)
+        public WndParser(string source, AssetStore assetStore)
         {
+            _assetStore = assetStore;
+
             var lexer = new WndLexer(source);
 
             _tokens = new List<WndToken>();
@@ -482,20 +487,16 @@ namespace OpenSage.Data.Wnd.Parser
 
         private Point2D ParsePoint()
         {
-            return new Point2D
-            {
-                X = NextIntegerLiteralTokenValue(),
-                Y = NextIntegerLiteralTokenValue()
-            };
+            return new Point2D(
+                NextIntegerLiteralTokenValue(),
+                NextIntegerLiteralTokenValue());
         }
 
         private Size ParseSize()
         {
-            return new Size
-            {
-                Width = NextIntegerLiteralTokenValue(),
-                Height = NextIntegerLiteralTokenValue()
-            };
+            return new Size(
+                NextIntegerLiteralTokenValue(),
+                NextIntegerLiteralTokenValue());
         }
 
         private WndWindowStatusFlags ParseStatus()
@@ -664,13 +665,11 @@ namespace OpenSage.Data.Wnd.Parser
 
         private ColorRgba ParseColor()
         {
-            return new ColorRgba
-            {
-                R = (byte) NextIntegerLiteralTokenValue(),
-                G = (byte) NextIntegerLiteralTokenValue(),
-                B = (byte) NextIntegerLiteralTokenValue(),
-                A = (byte) NextIntegerLiteralTokenValue()
-            };
+            return new ColorRgba(
+                (byte) NextIntegerLiteralTokenValue(),
+                (byte) NextIntegerLiteralTokenValue(),
+                (byte) NextIntegerLiteralTokenValue(),
+                (byte) NextIntegerLiteralTokenValue());
         }
 
         private WndDrawData ParseDrawData()
@@ -708,9 +707,13 @@ namespace OpenSage.Data.Wnd.Parser
 
             var borderColor = ParseAttribute("BORDERCOLOR", ParseColor);
 
+            var imageReference = (!string.IsNullOrEmpty(image) && image != "NoImage")
+                ? _assetStore.MappedImages.GetLazyAssetReferenceByName(image)
+                : null;
+
             return new WndDrawDataItem
             {
-                Image = image,
+                Image = imageReference,
                 Color = color,
                 BorderColor = borderColor
             };

@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using OpenSage.Data.Apt.Characters;
 using OpenSage.Gui.Apt.ActionScript.Library;
 
@@ -11,10 +8,13 @@ namespace OpenSage.Gui.Apt.ActionScript
 {
     public class ObjectContext
     {
+
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         /// <summary>
         /// The item that this context is connected to
         /// </summary>
-        public IDisplayItem Item { get; private set; }
+        public DisplayItem Item { get; private set; }
 
         /// <summary>
         /// Contains functions and member variables
@@ -38,7 +38,7 @@ namespace OpenSage.Gui.Apt.ActionScript
         /// </summary>
         /// <param name="item"></param>
         /// the item that this context is bound to
-        public ObjectContext(IDisplayItem item)
+        public ObjectContext(DisplayItem item)
         {
             Variables = Variables = new Dictionary<string, Value>(StringComparer.OrdinalIgnoreCase);
             Constants = new List<Value>();
@@ -55,19 +55,52 @@ namespace OpenSage.Gui.Apt.ActionScript
         /// <returns></returns>
         public virtual Value GetMember(string name)
         {
-            Value result;
-
-            if (!Variables.TryGetValue(name, out result))
+            if (IsBuiltInVariable(name))
             {
-                Debug.WriteLine("[WARN] Undefined variable: " + name);
-                result = Value.Undefined();
+                return GetBuiltInVariable(name);
             }
 
-            return result;
+            if (Variables.TryGetValue(name, out var result))
+            {
+                return result;
+            }
+
+            logger.Warn($"[WARN] Undefined variable: {name}");
+            return Value.Undefined();
         }
 
         /// <summary>
-        /// Check wether or not a string is a builtin flash function
+        /// Check wether or not a string is a builtin flash variable
+        /// </summary>
+        /// <param name="name">variable name</param>
+        /// <returns></returns>
+        public virtual bool IsBuiltInVariable(string name)
+        {
+            return Builtin.IsBuiltInVariable(name);
+        }
+
+        /// <summary>
+        /// Get builtin variable
+        /// </summary>
+        /// <param name="name">variable name</param>
+        /// <returns></returns>
+        public virtual Value GetBuiltInVariable(string name)
+        {
+            return Builtin.GetBuiltInVariable(name, this);
+        }
+
+        /// <summary>
+        /// Set a builtin flash variable
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="val"></param>
+        public virtual void SetBuiltInVariable(string name, Value val)
+        {
+            Builtin.SetBuiltInVariable(name, this, val);
+        }
+
+        /// <summary>
+        /// Check whether or not a string is a builtin flash function
         /// </summary>
         /// <param name="name">function name</param>
         /// <returns></returns>
@@ -79,10 +112,12 @@ namespace OpenSage.Gui.Apt.ActionScript
         /// <summary>
         /// Execute a builtin function maybe move builtin functions elsewhere
         /// </summary>
-        /// <param name="name"><function name/param>
-        public virtual void CallBuiltInFunction(string name, Value[] args)
+        /// <param name="actx"></param>
+        /// <param name="name">function name</param>
+        /// <param name="args"></param>
+        public virtual void CallBuiltInFunction(ActionContext actx, string name, Value[] args)
         {
-            Builtin.CallBuiltInFunction(name, this, args);
+            Builtin.CallBuiltInFunction(name, actx, this, args);
         }
 
         private void InitializeProperties()
@@ -101,18 +136,19 @@ namespace OpenSage.Gui.Apt.ActionScript
         /// </summary>
         /// <param name="value">value name</param>
         /// <returns></returns>
-        public Value ResolveValue(string value,ObjectContext ctx)
+        public Value ResolveValue(string value, ObjectContext ctx)
         {
             var path = value.Split('.');
-            var obj = this;
-            var member = path.First();
+            var obj = ctx.GetParent();
+            var member = path.Last();
 
-            if(path.Length>1)
+            for (var i = 0; i < path.Length - 1; i++)
             {
-                if (Builtin.IsBuiltInVariable(path.First()))
+                var fragment = path[i];
+
+                if (Builtin.IsBuiltInVariable(fragment))
                 {
-                    obj = Builtin.GetBuiltInVariable(path.First(),ctx).ToObject();
-                    member = path[1];
+                    obj = Builtin.GetBuiltInVariable(fragment, obj).ToObject();
                 }
                 else
                 {
@@ -127,7 +163,7 @@ namespace OpenSage.Gui.Apt.ActionScript
         {
             ObjectContext result = null;
 
-            if(Item.Parent!=null)
+            if (Item.Parent != null)
             {
                 result = Item.Parent.ScriptObject;
             }
@@ -147,6 +183,12 @@ namespace OpenSage.Gui.Apt.ActionScript
                 case PropertyType.Name:
                     result = Value.FromString(Item.Name);
                     break;
+                case PropertyType.X:
+                    result = Value.FromFloat(Item.Transform.GeometryTranslation.X);
+                    break;
+                case PropertyType.Y:
+                    result = Value.FromFloat(Item.Transform.GeometryTranslation.Y);
+                    break;
                 default:
                     throw new NotImplementedException();
             }
@@ -160,6 +202,12 @@ namespace OpenSage.Gui.Apt.ActionScript
             {
                 case PropertyType.Visible:
                     Item.Visible = val.ToBoolean();
+                    break;
+                case PropertyType.XScale:
+                    Item.Transform.Scale((float) val.ToFloat(), 0.0f);
+                    break;
+                case PropertyType.YScale:
+                    Item.Transform.Scale(0.0f, (float) val.ToFloat());
                     break;
                 default:
                     throw new NotImplementedException();

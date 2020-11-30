@@ -1,5 +1,4 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
 
 namespace OpenSage.Logic.Object
 {
@@ -10,9 +9,9 @@ namespace OpenSage.Logic.Object
     /// </summary>
     public sealed class HackInternetAIUpdateModuleData : AIUpdateModuleData
     {
-        internal static new HackInternetAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
+        internal new static HackInternetAIUpdateModuleData Parse(IniParser parser) => parser.ParseBlock(FieldParseTable);
 
-        private static new readonly IniParseTable<HackInternetAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
+        private new static readonly IniParseTable<HackInternetAIUpdateModuleData> FieldParseTable = AIUpdateModuleData.FieldParseTable
             .Concat(new IniParseTable<HackInternetAIUpdateModuleData>
             {
                 { "UnpackTime", (parser, x) => x.UnpackTime = parser.ParseInteger() },

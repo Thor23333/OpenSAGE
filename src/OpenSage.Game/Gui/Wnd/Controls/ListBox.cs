@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Linq;
+using OpenSage.Data.Ini;
+using OpenSage.Data.Wnd;
 using OpenSage.Gui.Wnd.Images;
 using OpenSage.Mathematics;
 using SixLabors.Fonts;
@@ -96,6 +99,12 @@ namespace OpenSage.Gui.Wnd.Controls
             set => _itemsArea.SelectedIndex = value;
         }
 
+        public int MaxDisplay
+        {
+            get => _itemsArea.MaxDisplay;
+            set => _itemsArea.MaxDisplay = value;
+        }
+
         public override Font Font
         {
             set
@@ -114,7 +123,36 @@ namespace OpenSage.Gui.Wnd.Controls
             }
         }
 
-        public ListBox()
+        public ListBox(WndWindowDefinition wndWindow, ImageLoader imageLoader)
+            : this(wndWindow.ListBoxData.ColumnWidths, wndWindow.ListBoxData.Columns)
+        {
+            BorderColor = wndWindow.EnabledDrawData.Items[0].BorderColor.ToColorRgbaF();
+            BorderWidth = 1;
+
+            SelectedItemBackgroundImage = imageLoader.CreateFromStretchableWndDrawData(wndWindow.EnabledDrawData, 1, 3, 2);
+            SelectedItemHoverBackgroundImage = imageLoader.CreateFromStretchableWndDrawData(wndWindow.HiliteDrawData, 1, 3, 2);
+
+            IsScrollBarVisible = wndWindow.ListBoxData.ScrollBar;
+
+            if (wndWindow.ListBoxData.ScrollBar)
+            {
+                UpButtonImage = imageLoader.CreateFromWndDrawData(wndWindow.ListBoxEnabledUpButtonDrawData, 0);
+                UpButtonHoverImage = imageLoader.CreateFromWndDrawData(wndWindow.ListBoxHiliteUpButtonDrawData, 0);
+
+                DownButtonImage = imageLoader.CreateFromWndDrawData(wndWindow.ListBoxEnabledDownButtonDrawData, 0);
+                DownButtonHoverImage = imageLoader.CreateFromWndDrawData(wndWindow.ListBoxHiliteDownButtonDrawData, 0);
+
+                ThumbImage = imageLoader.CreateFromWndDrawData(wndWindow.SliderThumbEnabledDrawData, 0);
+                ThumbHoverImage = imageLoader.CreateFromWndDrawData(wndWindow.SliderThumbHiliteDrawData, 0);
+            };
+
+            if (wndWindow.ListBoxData.ForceSelect)
+            {
+                SelectedIndex = 0;
+            }
+        }
+
+        public ListBox(int[] columnWidths, int columns = 0)
         {
             _upButton = new Button();
             _upButton.Click += OnUpButtonClick;
@@ -125,21 +163,42 @@ namespace OpenSage.Gui.Wnd.Controls
             Controls.Add(_downButton);
 
             _thumb = new Button();
+            // TODO: split this in button down/up for dragging.
             _thumb.Click += OnThumbClick;
             Controls.Add(_thumb);
 
             _itemsArea = new ListBoxItemsArea();
             Controls.Add(_itemsArea);
+
+            // Calculate the columnwidths
+            int missing = columns - columnWidths.Length;
+            if (missing > 0)
+            {
+                var currentColumns = columnWidths.ToList();
+                int remaining = 100 - columnWidths.Sum();
+
+                // Split the remaining columns evenly
+                for (int i = 0; i < missing; ++i)
+                {
+                    currentColumns.Add(remaining / missing);
+                }
+
+                ColumnWidths = currentColumns.ToArray();
+            }
+            else
+            {
+                ColumnWidths = columnWidths;
+            }
         }
 
         private void OnUpButtonClick(object sender, EventArgs e)
         {
-            throw new NotImplementedException();
+            _itemsArea.CurrentStartIndex = Math.Max(_itemsArea.CurrentStartIndex - 1, 0);
         }
 
         private void OnDownButtonClick(object sender, EventArgs e)
         {
-            throw new NotImplementedException();
+            _itemsArea.CurrentStartIndex = Math.Min(_itemsArea.CurrentStartIndex + 1, Items.Length - MaxDisplay);
         }
 
         private void OnThumbClick(object sender, EventArgs e)
@@ -166,15 +225,18 @@ namespace OpenSage.Gui.Wnd.Controls
                 downButtonSize.Height);
 
             var thumbSize = _thumb.GetPreferredSize(infiniteSize);
+            var thumbHeight = thumbSize.Height;
+
             _thumb.Bounds = new Rectangle(
                 ClientRectangle.Right - thumbSize.Width,
                 _upButton.Bounds.Bottom,
                 thumbSize.Width,
-                thumbSize.Height);
+                thumbHeight);
 
             var itemsWidth = IsScrollBarVisible
                 ? _upButton.Left
                 : ClientSize.Width;
+
             _itemsArea.Bounds = new Rectangle(
                 0,
                 0,
@@ -195,12 +257,15 @@ namespace OpenSage.Gui.Wnd.Controls
     public sealed class ListBoxDataItem
     {
         public object DataItem { get; }
-        public string[] ColumnData { get; }
+        public string[] ColumnData { get; set; }
+        public int ListBoxItemHeight { get; set; }
+        public ColorRgbaF TextColor { get; }
 
-        public ListBoxDataItem(object dataItem, string[] columnData)
+        public ListBoxDataItem(object dataItem, string[] columnData, ColorRgbaF textColor)
         {
             DataItem = dataItem;
             ColumnData = columnData;
+            TextColor = textColor;
         }
     }
 
@@ -223,7 +288,18 @@ namespace OpenSage.Gui.Wnd.Controls
                     Controls.Add(new ListBoxItem(this, item));
                 }
 
-                UpdateSelectedItem();
+                UpdateSelectedItem(0);
+            }
+        }
+
+        private int _currentStartIndex = 0;
+        public int CurrentStartIndex
+        {
+            get => _currentStartIndex;
+            set
+            {
+                _currentStartIndex = value;
+                InvalidateLayout();
             }
         }
 
@@ -233,29 +309,64 @@ namespace OpenSage.Gui.Wnd.Controls
             get => _selectedIndex;
             set
             {
-                _selectedIndex = value;
-                UpdateSelectedItem();
+                UpdateSelectedItem(value);
                 SelectedIndexChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
-        private void UpdateSelectedItem()
+        private int _hoveredIndex = -1;
+        public int HoveredIndex
         {
-            for (var i = 0; i < _items.Length; i++)
+            get => _hoveredIndex;
+            set
             {
-                var item = (ListBoxItem) Controls[i];
-
-                if (i == _selectedIndex)
-                {
-                    item.BackgroundImage = IsMouseOver
-                        ? SelectedItemHoverBackgroundImage
-                        : SelectedItemBackgroundImage;
-                }
-                else
-                {
-                    item.BackgroundImage = null;
-                }
+                UpdateHoveredItem(value);
             }
+        }
+
+        private int _maxDisplay = -1;
+        public int MaxDisplay
+        {
+            get => _maxDisplay;
+            set
+            {
+                _maxDisplay = value;
+                InvalidateLayout();
+            }
+        }
+
+        private void UpdateSelectedItem(int nextIndex)
+        {
+            if (nextIndex == _selectedIndex) return;
+
+            if (nextIndex >= Controls.Count) return;
+
+            if (_selectedIndex >= 0)
+            {
+                var previousItem = Controls[_selectedIndex] as ListBoxItem;
+                previousItem.BackgroundImage = null;
+            }
+
+            var nextItem = Controls[nextIndex] as ListBoxItem;
+            nextItem.BackgroundImage = SelectedItemBackgroundImage;
+
+            _selectedIndex = nextIndex;
+        }
+
+        private void UpdateHoveredItem(int nextIndex)
+        {
+            if (nextIndex == _hoveredIndex) return;
+
+            if (_hoveredIndex >= 0)
+            {
+                var previousItem = Controls[_hoveredIndex] as ListBoxItem;
+                previousItem.BackgroundImage = _hoveredIndex == _selectedIndex ? SelectedItemBackgroundImage : null;
+            }
+
+            var nextItem = Controls[nextIndex] as ListBoxItem;
+            nextItem.BackgroundImage = nextIndex == _selectedIndex ? SelectedItemHoverBackgroundImage : HoverBackgroundImage;
+
+            _hoveredIndex = nextIndex;
         }
 
         private int[] _columnWidths;
@@ -277,7 +388,7 @@ namespace OpenSage.Gui.Wnd.Controls
         {
             var height = 0;
 
-            foreach (var child in Controls)
+            foreach (var child in Controls.AsList())
             {
                 height += child.GetPreferredSize(proposedSize).Height;
             }
@@ -287,26 +398,29 @@ namespace OpenSage.Gui.Wnd.Controls
 
         protected override void LayoutOverride()
         {
+            var stillVisible = MaxDisplay == -1 ? Items.Length : MaxDisplay;
             var y = 0;
+            if (Controls.Any())
+            {
+                y = _currentStartIndex * Controls.First().GetPreferredSize(ClientSize).Height * -1;
+            }
 
-            foreach (var child in Controls)
+            foreach (var child in Controls.AsList())
             {
                 var childHeight = child.GetPreferredSize(ClientSize).Height;
+                if (y >= 0 && stillVisible > 0)
+                {
+                    child.Visible = true;
+                    stillVisible--;
+                }
+                else
+                {
+                    child.Visible = false;
+                }
 
                 child.Bounds = new Rectangle(0, y, ClientSize.Width, childHeight);
 
                 y += childHeight;
-            }
-        }
-
-        protected override void DefaultInputOverride(WndWindowMessage message, ControlCallbackContext context)
-        {
-            switch (message.MessageType)
-            {
-                case WndWindowMessageType.MouseEnter:
-                case WndWindowMessageType.MouseExit:
-                    UpdateSelectedItem();
-                    break;
             }
         }
     }
@@ -329,11 +443,12 @@ namespace OpenSage.Gui.Wnd.Controls
         {
             _parent = parent;
             _item = item;
+            _item.ListBoxItemHeight = GetPreferredSize(ClientSize).Height;
         }
 
         private ListBoxItemDimension GetItemBounds(in Size proposedSize)
         {
-            if (proposedSize == _lastProposedSize)
+            if (proposedSize == _lastProposedSize && _cachedDimension != null)
             {
                 return _cachedDimension;
             }
@@ -347,7 +462,6 @@ namespace OpenSage.Gui.Wnd.Controls
             }
 
             var font = _parent.Font;
-
             var itemHeight = int.MinValue;
             for (var column = 0; column < _parent.ColumnWidths.Length; column++)
             {
@@ -397,6 +511,9 @@ namespace OpenSage.Gui.Wnd.Controls
                 case WndWindowMessageType.MouseUp:
                     _parent.SelectedIndex = _parent.Controls.IndexOf(this);
                     break;
+                case WndWindowMessageType.MouseEnter:
+                    _parent.HoveredIndex = _parent.Controls.IndexOf(this);
+                    break;
             }
         }
 
@@ -410,7 +527,7 @@ namespace OpenSage.Gui.Wnd.Controls
                     _item.ColumnData[column],
                     _parent.Font,
                     TextAlignment.Leading,
-                    _parent.TextColor,
+                    _item.TextColor,
                     itemBounds.ColumnBounds[column]);
             }
         }

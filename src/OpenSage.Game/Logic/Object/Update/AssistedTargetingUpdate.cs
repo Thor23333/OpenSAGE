@@ -1,8 +1,12 @@
 ﻿using OpenSage.Data.Ini;
-using OpenSage.Data.Ini.Parser;
 
 namespace OpenSage.Logic.Object
 {
+    public sealed class AssistedTargetingUpdate : UpdateModule
+    {
+        // TODO
+    }
+
     /// <summary>
     /// Allows weapons (or defense) to relay with a similar weapon (or defense) within its range.
     /// </summary>
@@ -22,5 +26,10 @@ namespace OpenSage.Logic.Object
         public WeaponSlot AssistingWeaponSlot { get; private set; } = WeaponSlot.Primary;
         public string LaserFromAssisted { get; private set; }
         public string LaserToTarget { get; private set; }
+
+        internal override BehaviorModule CreateModule(GameObject gameObject, GameContext context)
+        {
+            return new AssistedTargetingUpdate();
+        }
     }
 }
